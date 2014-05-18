@@ -1,9 +1,9 @@
 目录
 =======
 
-[1 修订记录](#1 修订记录)
+[1 修订记录](#1-修订记录)
 
-[2 摘要](#2 摘要)
+[2 摘要](#2-摘要)
 
 
 1 修订记录
@@ -31,4 +31,20 @@ Hadoop是一个用于在通用硬件集群上进行大数据存储和处理的�
 
 3 org.apache.hadoop.fs 包总述
 -----------------------------
+org.apache.hadoop.fs包提供了一个抽象文件系统的 API．该包下有89个类和接口，有7个包．
+如图3-1所示
+![img](3-1.png)
 
+其中有8个接口, 有四个抽象类: FileSystem, AbstractFileSystem, ChecksumFileSystem, TrashPolicy．
+
+FileSystem 抽象类和 AbstractFileSystem 抽象类作为抽象文件系统
+的基类,提供了基本的抽象操作。其中 FileSystem 类是 0.21 版本之前唯一的基类,但在 0.21 版本
+中,出现了 AbstractFileSystem,该类似乎来取代 FileSystem 类原来的部分功能。在这两个基类的
+基础上形成了两个类继承的层次结构。
+
+org.apache.hadoop.fs 子包 ftp、 local、 s3、 s3native 和 viewfs 都是实现的具体的文件系统.
+permission文件夹实现了有关文件访问许可的功能。shell 文件夹实现了对 shell 命令的调用。
+
+
+
+  [3-1.jpg]: ./images/3-1.jpg
