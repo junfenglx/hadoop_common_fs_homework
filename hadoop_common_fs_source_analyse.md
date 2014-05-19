@@ -1,17 +1,17 @@
 目录
 =======
 
-[1 修订记录](#1-修订记录)
+[1 修订记录]
 
-[2 摘要](#2-摘要)
+[2 摘要]
 
-[3 org.apache.hadoop.fs包总述](#3-org.apache.hadoop.fs包总述)
+[3 org.apache.hadoop.fs包总述]
 
-[4 Hadoop文件系统概述](#4-Hadoop文件系统概述)
-    [4.1 类层次结构](#4.1-类层次结构)
-    [4.2 输入输出流](#4.2-输入输出流)
-        [4.2.1 Java中的IO](#4.2.1-Java中的IO)
-        [4.2.2 Hadoop中的IO](#4.2.2-Hadoop的IO)
+[4 Hadoop文件系统概述]
+    * [4.1 类层次结构]
+    * [4.2 输入输出流]
+        * [4.2.1 Java中的IO]
+        * [4.2.2 Hadoop中的IO]
 
 1 修订记录
 ----------
@@ -40,7 +40,7 @@ Hadoop是一个用于在通用硬件集群上进行大数据存储和处理的�
 -----------------------------
 org.apache.hadoop.fs包提供了一个抽象文件系统的 API．该包下有89个类和接口，有7个包．
 如图3-1所示
-![img](3-1.jpg)
+![img][3-1.jpg]
 
 其中有8个接口, 有四个抽象类: FileSystem, AbstractFileSystem, ChecksumFileSystem, TrashPolicy．
 
