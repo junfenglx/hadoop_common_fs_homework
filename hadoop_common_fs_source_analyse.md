@@ -122,14 +122,100 @@ ChecksumFs 对应 ChecksumFileSystem,LocalFs 对应 LocalFileSystem, RawLocalFs 
 ViewFs, hdfs的实现是根据各个文件系统的特点直接实现的
 
 ###4.2 输入输出流
+Hadoop 中类的设计在很多地方模仿了 Java。典型的就是文件的输入输出流。
+如图4-3:
+![img][4-3.png]
+如图4-4
+![img][4-4.png]
 
 ####4.2.1 Java中的IO
+可将 Java 库的 IO 类分割为输入与输出两个部分,这一点在用 Web 浏览器阅读联机 Java 类
+文档时便可知道。通过继承,从 InputStream(输入流)衍生的所有类都拥有名为 read()的基本方
+法,用于读取单个字节或者字节数组。类似地,从 OutputStream 衍生的所有类都拥有基本方法
+write(),用于写入单个字节或者字节数组。然而,我们通常不会用到这些方法;它们之所以存在,
+是因为更复杂的类可以利用它们,以便提供一个更有用的接口。因此,我们很少用单个类创建自
+己的系统对象。一般情况下,我们都是将多个对象重叠在一起,提供自己期望的功能。我们之所
+以感到 Java 的流库(Stream Library)异常复杂,正是由于为了创建单独一个结果流,却需要创建
+多个对象的缘故。很有必要按照功能对类进行分类。库的设计者首先决定与输入有关的所有类都
+从 InputStream 继承,而与输出有关的所有类都从 OutputStream 继承。
+
+#####4.2.1.1 InputStream
+InputStream 的作用是标志那些从不同起源地产生输入的类。这些起源地包括(每个都有一个
+相关的 InputStream 子类):
+1. 字节数组
+2. String 对象
+3. 文件
+4. “管道”,它的工作原理与现实生活中的管道类似:将一些东西置入一端,它们在另一端
+    出来
+5. 一系列其他流,以便我们将其统一收集到单独一个流内
+6. 其他起源地,如 Internet 连接等
+
+除此以外,FilterInputStream 也属于 InputStream 的一种类型,用它可为“装饰器”类提供一
+个基础类(装饰器模式), 以便将属性或者有用的接口同输入流连接到一起
+
+ByteArrayInputStream:允许内存中的一个缓冲区作为 InputStream,使用从中提取字节的缓冲
+区作为一个数据源使用。通过将其同一个 FilterInputStream 对象连接,可提供一个有用的接口。
+
+StringBufferInputStream:将一个 String 转换成 InputStream 一个 String(字串)。基础的实施
+方案实际采用一个 StringBuffer (字串缓冲)作为一个数据源使用。通过将其同一个 FilterInputStream
+对象连接,可提供一个有用的接口。
+
+FileInputStream:用于从文件读取信息代表文件名的一个 String,或者一个 File FileDescriptor
+对象作为一个数据源使用。通过将其同一个 FilterInputStream 对象连接,可提供一个有用的接口。
+
+PipedInputStream:读出与之相关的PipedOutputStream 写的数据。实现了“管道化”的概念。
+
+SequenceInputStream:将两个或更多的 InputStream 对象转换成单个 InputStream. 参数为两个
+InputStream 对象或者一个 包含InputStream的Enumeration容器.
+作为一个数据源使用, 通过将其同一个 FilterInputStream 对象连接,可提供一个有用的接口.
+
+FilterInputStream:作为具体装饰器类的抽象类; 装饰器类为其他 InputStream 类提供了有用的功能。
+
+#####4.2.1.2 OutputStream
+这一类别包括的类决定了我们的输入往何处去:一个字节数组(但没有 String;假定我们可用
+字节数组创建一个);一个文件;或者一个“管道”。
+
+除此以外,FilterOutputStream 为装饰器类提供了一个基础类,它将属性或者有用的接口
+同输出流连接起来
+
+ByteArrayOutputStream:在内存中创建一个缓冲区。我们发送给流的所有数据都会置入这个
+缓冲区。可选缓冲区的初始大小用于指出数据的目的地。若将其同 FilterOutputStream 对象连接到
+一起,可提供一个有用的接口。
+
+FileOutputStream:将信息发给一个文件,用一个 String 代表文件名,或选用一个 File 或
+FileDescriptor 对象用于指出数据的目的地。若将其同 FilterOutputStream 对象连接到一起,可提供
+一个有用的接口。
+
+PipedOutputStream:我们写给它的任何信息都会自动会从相关的 PipedInputStream 读出。实
+现 了 “ 管 道 化 ” 的 概 念 。 PipedInputStream为多线程处理指出自己数据的目的地, 将其同
+FilterOutputStream 对象连接到一起,便可提供一个有用的接口
+
+FilterOutputStream 对作为装饰器接口使用的类进行抽象处理;那个装饰器为其它OutputStream
+类提供了有用的功能
+
+#####4.2.1.3 DataInputStream
+DataInputStream 从 FilterInputStream 派生, 需要传入一个InputStream.
+数据输入流允许应用程序以与机器无关方式从底层输入流中读取基本 Java 数据类型。应用程
+序可以使用数据输出流写入稍后由数据输入流读取的数据。DataInputStream 对于多线程访问不一
+定是安全的。线程安全是可选的,它由此类方法的使用者负责。
+
+#####4.2.1.4 DataOutputStream
+DataOutputStream 数据输出流允许应用程序以适当方式将基本 Java 数据类型写入输出流中。
+然后,应用程序可以使用数据输入流将数据读入。
 
 ####4.2.2 Hadoop中的IO
+在 Hadoop 中, FSInputStream(Abstract Class)、
+FSDataInputStream 和 FSDataOutputStream 的作用与 InputStream、
+DataInputStream 和 DataOutputStream 在 Java IO 中的作用类似。用 FileSystem 的 create 方法创建
+一个输出流时的返回值类型为 FSDataOutputStream,而 open 方法则返回一个 FSDataInputStream 实例。
 
-
+Hadoop 中并没有 FSOutputStream,有些FileSystem类从 OutputStream 派生实现了自己的OutputStream.
+很多文件系统都会从 FSInputStream 派生出和自己特定文件系统相关的FSInputStream.
+通过这种方式实现自己特定的输入输出流. 如 S3InputStream RawLocalFileSystem 等等。
 
   [3-1.jpg]: ./images/3-1.jpg
   [4-1.png]: ./images/4-1.png
   [4-2.png]: ./images/4-2.png
   [S3]: http://aws.amazon.com/s3
+  [4-3.png]: ./images/4-3.png
+  [4-4.png]: ./images/4-4.png
