@@ -34,7 +34,7 @@ Hadoop是一个用于在通用硬件集群上进行大数据存储和处理的�
 
 3 org.apache.hadoop.fs包总述
 -----------------------------
-org.apache.hadoop.fs包提供了一个抽象文件系统的 API．该包下有89个类和接口，有7个包．
+org.apache.hadoop.fs包提供了一个抽象文件系统的 API．该包下有80多个类和接口，有7个包．
 如图3-1所示
 ![img][3-1.jpg]
 
@@ -45,7 +45,7 @@ FileSystem 抽象类和 AbstractFileSystem 抽象类作为抽象文件系统
 中,出现了 AbstractFileSystem,该类似乎来取代 FileSystem 类原来的部分功能。在这两个基类的
 基础上形成了两个类继承的层次结构。
 
-org.apache.hadoop.fs 子包 ftp、 local、 s3、 s3native 和 HDFS 都是实现的具体的文件系统.
+org.apache.hadoop.fs 子包 ftp、 local、 s3、 s3native 和 Hdfs 类都是实现的对具体的文件系统操作的类.
 permission文件夹实现了有关文件访问许可的功能。shell 文件夹实现了对 shell 命令的调用。
 
 4 Hadoop文件系统概述
@@ -66,17 +66,27 @@ FileSystem 抽象类和 AbstractFileSystem 抽象类。然后从基类派生,以
 HDFS是Hadoop下的另一子模块，它是一个分布式文件系统，是具体的文件系统实现．它和S3, LocalFS都是文件系统.
 而org.apache.hadoop.fs包是对不同文件系统的抽象表示，它建立了一个抽象的统一的文件系统接口.
 应用程序开发者通过fs包可以和不同的文件系统交互，而不用知道它所进行的操作所在的具体是什么文件系统．
-而不同的文件系统开发者则可以根据fs包很容易的使其它文件系统支持Hadoop
+而不同的文件系统开发者则可以根据fs包很容易的使其它文件系统支持Hadoop.
 
-如前所述,关于文件系统有两个类继承的层次结构,
 fs包下的类继承层次结构如图 4-1 所示:
 ![img][4-1.png]
 fs各子包下的类继承层次结构如图4-2所示:
 ![img][4-2.png]
 
-这两类层次结构十分相似,很多类的实现几乎完全一样。
-除 FilterFileSystem 外,FileSystem 的直接子类都是具体的文件系统。包括以下文件系统:
-* 
+除 FilterFileSystem 外,FileSystem 的直接子类都是跟具体文件系统交互的类。包括以下子类:
+* 由FileSystem派生:
+    * S3FileSystem(org.apache.hadoop.fs.s3) - 数据以块形式存储在[Amazon S3][S3]
+    * NativeS3FileSystem(org.apache.hadoop.fs.s3) - 文件以原生格式存储在[Amazon S3][S3]
+    * ChRootedFileSystem(org.apache.hadoop.fs.viewfs) - 根目录为已有文件系统的某个路径的文件系统
+    * ViewFileSystem(org.apache.hadoop.fs.viewfs) - 实现了客户端的挂载表
+    * DistributedFileSystem(org.apache.hadoop.hdfs) - 为DFS system 实现了抽象类FileSystem. 用户代码通过该类和Hadoop DistributedFileSystem交互
+    * LocalFileSystem - 为还有校验功能的本地文件系统实现了FileSystem API(内部使用RawLocalFileSystem, Decorator Pattern)
+    * RawLocalFileSystem - 为原生本地文件系统实现了FileSystem API
+    * FTPFileSystem(org.apache.hadoop.fs.ftp) - 基于FTP协议和FTP服务器交互的FileSystem API实现
+* 由AbstractFileSystem派生:
+    * RawLocalFs(org.apache.hadoop.fs.local) - 内部委派给RawLocalFileSystem来实现AbstractFileSystem API(delegation pattern)
+    * FtpFs(org.apache.hadoop.fs.ftp) - 内部委派给FTPFileSystem来实现AbstractFileSystem API(delegation pattern)
+    * 
 
 ###4.2 输入输出流
 
@@ -89,3 +99,4 @@ fs各子包下的类继承层次结构如图4-2所示:
   [3-1.jpg]: ./images/3-1.jpg
   [4-1.png]: ./images/4-1.png
   [4-2.png]: ./images/4-2.png
+  [S3]: http://aws.amazon.com/s3
