@@ -86,7 +86,40 @@ fs各子包下的类继承层次结构如图4-2所示:
 * 由AbstractFileSystem派生:
     * RawLocalFs(org.apache.hadoop.fs.local) - 内部委派给RawLocalFileSystem来实现AbstractFileSystem API(delegation pattern)
     * FtpFs(org.apache.hadoop.fs.ftp) - 内部委派给FTPFileSystem来实现AbstractFileSystem API(delegation pattern)
-    * 
+    * LocalFs(org.apache.hadoop.fs.local) - 和LocalFileSystem的实现类似, 继承ChecksumFs. (内部使用RawLocalFs实现, Decorator Pattern)
+    * ViewFs(org.apache.hadoop.fs.viewfs) - 完全在客户端的内存中实现挂载表
+    * Hdfs - 为Hadoop DistributedFileSystem实现了AbstractFileSystem API
+
+*注解:*
+* LocalFileSystem是加上Checksum功能的本地文件系统，该类和操作系统本地文件系统交互，内部使用RawLocalFileSystem.
+RawLocalFileSystem是代表没有Checksum功能的操作系统本地文件系统．
+* 继承自AbstractFileSystem的LocalFS和RawLocalFs结构同上．其内部实现被委派给RawLocalFileSystem.
+* Amazon S3没有5G限制
+
+
+Hadoop 的使用者可以分为两类,应用程序编写者和文件系统实现者。在 Hadoop 0.21 版本之
+前, FileSystem 类作为一般(抽象)文件系统的基类,一方面为应用程序编写者提供了使用 Hadoop
+文件系统的接口,另一方面,为文件系统实现者提供了实现一个文件系统的接口(如 hdfs,本地
+文件系统,FtpFs等等)。
+
+但在 Hadoop 0.21 版本中,出现了 FileContext 类和 AbstractFileSystem 类,
+通过这两个 API,可以将原来集中于 FileSystem 一个类中的功能分开,让使用者更加方便的在应
+用程序中使用多个文件系统。
+
+FileContext 这个 API 还没有在 hadoop 中被大量的使用,因为还没有
+被合并到 mapreduce 计算中,但是它包含了正常的 FileSystem 接口没有的新功能,如支持 hdfs
+层面的软链接等。
+
+FileContext 类是用来取代 FileSystem 类,向 应用程序编写者 提供使用 Hadoop
+文件系统的接口,而原来的 FileSystem 则仅由 文件系统实现者 使用。估计 AbstractFileSystem 类将
+来会取代 FileSystem 类。
+
+从图 4-1, 4-2 中可以看出 AbstractFileSystem 对应 FileSystem,FilterFs 对应 FiterFileSystem,
+ChecksumFs 对应 ChecksumFileSystem,LocalFs 对应 LocalFileSystem, RawLocalFs 对应 RawLocalFileSystem。
+
+而在各个具体的文件系统类, FtpFs 和RawLocalFs
+通过DelegateToFileSystem(delegation pattern)委派给已有的FTPFileSystem, RawLocalFileSystem,
+ViewFs, hdfs的实现是根据各个文件系统的特点直接实现的
 
 ###4.2 输入输出流
 
