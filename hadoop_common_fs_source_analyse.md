@@ -45,7 +45,7 @@ FileSystem 抽象类和 AbstractFileSystem 抽象类作为抽象文件系统
 中,出现了 AbstractFileSystem,该类似乎来取代 FileSystem 类原来的部分功能。在这两个基类的
 基础上形成了两个类继承的层次结构。
 
-org.apache.hadoop.fs 子包 ftp、 local、 s3、 s3native 和 viewfs 都是实现的具体的文件系统.
+org.apache.hadoop.fs 子包 ftp、 local、 s3、 s3native 和 HDFS 都是实现的具体的文件系统.
 permission文件夹实现了有关文件访问许可的功能。shell 文件夹实现了对 shell 命令的调用。
 
 4 Hadoop文件系统概述
@@ -56,6 +56,21 @@ permission文件夹实现了有关文件访问许可的功能。shell 文件夹�
     * [4.2.2 Hadoop中的IO](#422-hadoop的io)
 
 ###4.1 类层次结构
+Hadoop 文件系统可以访问多个不同的具体的文件系统,如 HDFS、LocalFS和 S3 文件系统。不
+同的文件系统具有不同的具体实现,Hadoop fs包下实现的是一层类似 Linux 中的 VFS 虚拟文件系统,它从不同
+的文件系统中抽取了共同的操作,这些操作是一般的文件系统都具有的操作,如打开文件,创建
+文件,删除文件,复制文件,获取文件的信息等。这些共同的基本操作组合在一起就形成了
+FileSystem 抽象类和 AbstractFileSystem 抽象类。然后从基类派生,以实现对不同文件系统的统一操作。
+
+*注解:*
+HDFS是Hadoop下的另一子模块，它是一个分布式文件系统，是具体的文件系统实现．它和S3, FTP
+
+如前所述,关于文件系统有两个类继承的层次结构,
+FileSystem类继承层次结构如图 4-1 所示:
+![img][4-1.png]
+AbstractFileSystem类继承层次结构如图4-2所示:
+![img][4-2.png]
+
 
 ###4.2 输入输出流
 
@@ -66,3 +81,5 @@ permission文件夹实现了有关文件访问许可的功能。shell 文件夹�
 
 
   [3-1.jpg]: ./images/3-1.jpg
+  [4-1.png]: ./images/4-1.png
+  [4-2.png]: ./images/4-2.png
