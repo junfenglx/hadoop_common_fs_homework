@@ -233,6 +233,18 @@ Hadoop 中并没有 FSOutputStream,有些FileSystem类从 OutputStream 派生实
 * [5.4 ChecksumFileSystem](#54-checksumfilesystem)
 * [5.5 LocalFileSystem](#55-localfilesystem)
 
+###5.1 fs中的接口
+org.apache.hadoop.fs包中的接口不多，有：
+* CanSetDropBehind - 配置流是否应该丢掉缓存
+* CanSetReadahead - 设置预读取流
+* FsConstants     表示文件系统有关的常量。
+* PathFilter - 测试抽象路径名是否应该包含在某个抽象路径名表中
+* PositionedReadable 和Seekable 提供了随机读写功能
+* Syncable        文件同步
+* VolumeId - 标识一个硬盘位置的接口
+
+###5.2 FileSystem
+
 
   [3-1.jpg]: ./images/3-1.jpg
   [4-1.png]: ./images/4-1.png
