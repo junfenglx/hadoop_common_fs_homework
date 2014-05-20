@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>hadoop_common_fs_source_analyse</title>
+<link rel="stylesheet" href="https://stackedit.io/res-min/themes/base.css" />
+<script type="text/javascript" src="https://stackedit.io/libs/MathJax/MathJax.js?config=TeX-AMS_HTML"></script>
+</head>
+<body><div class="container"><h1 id="目录">目录</h1>
+
+<p><a href="#1-修订记录">1 修订记录</a></p>
+
+<p><a href="#2-摘要">2 摘要</a></p>
+
+<p><a href="#3-orgapachehadoopfs包总述">3 org.apache.hadoop.fs包总述</a></p>
+
+<p><a href="#4-hadoop文件系统概述">4 Hadoop文件系统概述</a></p>
+
+<p><a href="#5-filesystem深入分析">5 FileSystem深入分析</a></p>
+
+<h2 id="1-修订记录">1 修订记录</h2>
+
+<table>
+<thead>
+<tr>
+  <th>序号</th>
+  <th>时间</th>
+  <th>修订人</th>
+  <th>版本</th>
+</tr>
+</thead>
+<tbody><tr>
+  <td>1</td>
+  <td>2011 年 1 月 12 日</td>
+  <td>何芳、范永刚</td>
+  <td>1.0</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td>2011 年 1 月 28 日</td>
+  <td>鲍亮</td>
+  <td>1.1</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td>2014 年 5 月 18 日</td>
+  <td>213小组</td>
+  <td>1.2</td>
+</tr>
+</tbody></table>
+
+
+<p><em>Hadoop版本: 2.4.0</em></p>
+
+<h2 id="2-摘要">2 摘要</h2>
+
+<p>Hadoop是一个用于在通用硬件集群上进行大数据存储和处理的开源软件框架．</p>
+
+<p>它主要包括以下几个模块： <br>
+* Hadoop Common. 包含其它模块需要的库和一些实用程序 <br>
+* Hadoop Distributed File System (HDFS). 一个把数据存储在通用硬件的分布 <br>
+式文件系统．在集群内能提供非常高的总计带宽 <br>
+* Hadoop YARN. 用于管理集群内的计算资源和调度用户应用程序的资源管理平台 <br>
+* Hadoop MapReduce. 一个用于大数据处理的编程模型．</p>
+
+<p>所有的模块都在设计层面上考虑到了硬件错误．因此这些错误自动的在软件框架内被处理．</p>
+
+<h2 id="3-orgapachehadoopfs包总述">3 org.apache.hadoop.fs包总述</h2>
+
+<p>org.apache.hadoop.fs包提供了一个抽象文件系统的 API．该包下有80多个类和接口，有7个包． <br>
+如图3-1所示 <br>
+<img src="./images/3-1.jpg" alt="img" title=""></p>
+
+<p>其中有8个接口, 有四个抽象类: FileSystem, AbstractFileSystem, ChecksumFileSystem, TrashPolicy．</p>
+
+<p>FileSystem 抽象类和 AbstractFileSystem 抽象类作为抽象文件系统 <br>
+的基类,提供了基本的抽象操作。其中 FileSystem 类是 0.21 版本之前唯一的基类,但在 0.21 版本 <br>
+中,出现了 AbstractFileSystem,该类似乎来取代 FileSystem 类原来的部分功能。在这两个基类的 <br>
+基础上形成了两个类继承的层次结构。</p>
+
+<p>org.apache.hadoop.fs 子包 ftp、 local、 s3、 s3native 和 Hdfs 类都是实现的对具体的文件系统操作的类. <br>
+permission文件夹实现了有关文件访问许可的功能。shell 文件夹实现了对 shell 命令的调用。</p>
+
+<h2 id="4-hadoop文件系统概述">4 Hadoop文件系统概述</h2>
+
+<ul>
+<li><a href="#41-类层次结构">4.1 类层次结构</a></li>
+<li><a href="#42-输入输出流">4.2 输入输出流</a> <br>
+<ul><li><a href="#421-java中的io">4.2.1 Java中的IO</a></li>
+<li><a href="#422-hadoop中的io">4.2.2 Hadoop中的IO</a></li></ul></li>
+</ul>
+
+<h3 id="41-类层次结构">4.1 类层次结构</h3>
+
+<p>Hadoop 文件系统可以访问多个不同的具体的文件系统,如 HDFS、LocalFS和 S3 文件系统。不 <br>
+同的文件系统具有不同的具体实现,Hadoop fs包下实现的是一层类似 Linux 中的 VFS 虚拟文件系统,它从不同 <br>
+的文件系统中抽取了共同的操作,这些操作是一般的文件系统都具有的操作,如打开文件,创建 <br>
+文件,删除文件,复制文件,获取文件的信息等。这些共同的基本操作组合在一起就形成了 <br>
+FileSystem 抽象类和 AbstractFileSystem 抽象类。然后从基类派生,以实现对不同文件系统的统一操作。</p>
+
+<p><em>注解:</em> <br>
+HDFS是Hadoop下的另一子模块，它是一个分布式文件系统，是具体的文件系统实现．它和S3, LocalFS都是文件系统. <br>
+而org.apache.hadoop.fs包是对不同文件系统的抽象表示，它建立了一个抽象的统一的文件系统接口. <br>
+应用程序开发者通过fs包可以和不同的文件系统交互，而不用知道它所进行的操作所在的具体是什么文件系统． <br>
+而不同的文件系统开发者则可以根据fs包很容易的使其它文件系统支持Hadoop.</p>
+
+<p>fs包下的类继承层次结构如图 4-1 所示: <br>
+<img src="./images/4-1.png" alt="img" title=""> <br>
+fs各子包下的类继承层次结构如图4-2所示: <br>
+<img src="./images/4-2.png" alt="img" title=""></p>
+
+<p>除 FilterFileSystem 外,FileSystem 的直接子类都是跟具体文件系统交互的类。包括以下子类: <br>
+* 由FileSystem派生: <br>
+    * S3FileSystem(org.apache.hadoop.fs.s3) - 数据以块形式存储在<a href="http://aws.amazon.com/s3">Amazon S3</a> <br>
+    * NativeS3FileSystem(org.apache.hadoop.fs.s3) - 文件以原生格式存储在<a href="http://aws.amazon.com/s3">Amazon S3</a> <br>
+    * ChRootedFileSystem(org.apache.hadoop.fs.viewfs) - 根目录为已有文件系统的某个路径的文件系统 <br>
+    * ViewFileSystem(org.apache.hadoop.fs.viewfs) - 实现了客户端的挂载表 <br>
+    * DistributedFileSystem(org.apache.hadoop.hdfs) - 为DFS system 实现了抽象类FileSystem. 用户代码通过该类和Hadoop DistributedFileSystem交互 <br>
+    * LocalFileSystem - 为还有校验功能的本地文件系统实现了FileSystem API(内部使用RawLocalFileSystem, Decorator Pattern) <br>
+    * RawLocalFileSystem - 为原生本地文件系统实现了FileSystem API <br>
+    * FTPFileSystem(org.apache.hadoop.fs.ftp) - 基于FTP协议和FTP服务器交互的FileSystem API实现 <br>
+* 由AbstractFileSystem派生: <br>
+    * RawLocalFs(org.apache.hadoop.fs.local) - 内部委派给RawLocalFileSystem来实现AbstractFileSystem API(delegation pattern) <br>
+    * FtpFs(org.apache.hadoop.fs.ftp) - 内部委派给FTPFileSystem来实现AbstractFileSystem API(delegation pattern) <br>
+    * LocalFs(org.apache.hadoop.fs.local) - 和LocalFileSystem的实现类似, 继承ChecksumFs. (内部使用RawLocalFs实现, Decorator Pattern) <br>
+    * ViewFs(org.apache.hadoop.fs.viewfs) - 完全在客户端的内存中实现挂载表 <br>
+    * Hdfs - 为Hadoop DistributedFileSystem实现了AbstractFileSystem API</p>
+
+<p><em>注解:</em> <br>
+* LocalFileSystem是加上Checksum功能的本地文件系统，该类和操作系统本地文件系统交互，内部使用RawLocalFileSystem. <br>
+RawLocalFileSystem是代表没有Checksum功能的操作系统本地文件系统． <br>
+* 继承自AbstractFileSystem的LocalFS和RawLocalFs结构同上．其内部实现被委派给RawLocalFileSystem. <br>
+* Amazon S3没有5G限制</p>
+
+<p>Hadoop 的使用者可以分为两类,应用程序编写者和文件系统实现者。在 Hadoop 0.21 版本之 <br>
+前, FileSystem 类作为一般(抽象)文件系统的基类,一方面为应用程序编写者提供了使用 Hadoop <br>
+文件系统的接口,另一方面,为文件系统实现者提供了实现一个文件系统的接口(如 hdfs,本地 <br>
+文件系统,FtpFs等等)。</p>
+
+<p>但在 Hadoop 0.21 版本中,出现了 FileContext 类和 AbstractFileSystem 类, <br>
+通过这两个 API,可以将原来集中于 FileSystem 一个类中的功能分开,让使用者更加方便的在应 <br>
+用程序中使用多个文件系统。</p>
+
+<p>FileContext 这个 API 还没有在 hadoop 中被大量的使用,因为还没有 <br>
+被合并到 mapreduce 计算中,但是它包含了正常的 FileSystem 接口没有的新功能,如支持 hdfs <br>
+层面的软链接等。</p>
+
+<p>FileContext 类是用来取代 FileSystem 类,向 应用程序编写者 提供使用 Hadoop <br>
+文件系统的接口,而原来的 FileSystem 则仅由 文件系统实现者 使用。估计 AbstractFileSystem 类将 <br>
+来会取代 FileSystem 类。</p>
+
+<p>从图 4-1, 4-2 中可以看出 AbstractFileSystem 对应 FileSystem,FilterFs 对应 FiterFileSystem, <br>
+ChecksumFs 对应 ChecksumFileSystem,LocalFs 对应 LocalFileSystem, RawLocalFs 对应 RawLocalFileSystem。</p>
+
+<p>而在各个具体的文件系统类, FtpFs 和RawLocalFs <br>
+通过DelegateToFileSystem(delegation pattern)委派给已有的FTPFileSystem, RawLocalFileSystem, <br>
+ViewFs, hdfs的实现是根据各个文件系统的特点直接实现的</p>
+
+<h3 id="42-输入输出流">4.2 输入输出流</h3>
+
+<p>Hadoop 中类的设计在很多地方模仿了 Java。典型的就是文件的输入输出流。 <br>
+如图4-3: <br>
+<img src="./images/4-3.png" alt="img" title=""> <br>
+如图4-4 <br>
+<img src="./images/4-4.png" alt="img" title=""></p>
+
+<h4 id="421-java中的io">4.2.1 Java中的IO</h4>
+
+<p>可将 Java 库的 IO 类分割为输入与输出两个部分,这一点在用 Web 浏览器阅读联机 Java 类 <br>
+文档时便可知道。通过继承,从 InputStream(输入流)衍生的所有类都拥有名为 read()的基本方 <br>
+法,用于读取单个字节或者字节数组。类似地,从 OutputStream 衍生的所有类都拥有基本方法 <br>
+write(),用于写入单个字节或者字节数组。然而,我们通常不会用到这些方法;它们之所以存在, <br>
+是因为更复杂的类可以利用它们,以便提供一个更有用的接口。因此,我们很少用单个类创建自 <br>
+己的系统对象。一般情况下,我们都是将多个对象重叠在一起,提供自己期望的功能。我们之所 <br>
+以感到 Java 的流库(Stream Library)异常复杂,正是由于为了创建单独一个结果流,却需要创建 <br>
+多个对象的缘故。很有必要按照功能对类进行分类。库的设计者首先决定与输入有关的所有类都 <br>
+从 InputStream 继承,而与输出有关的所有类都从 OutputStream 继承。</p>
+
+<h5 id="4211-inputstream">4.2.1.1 InputStream</h5>
+
+<p>InputStream 的作用是标志那些从不同起源地产生输入的类。这些起源地包括(每个都有一个 <br>
+相关的 InputStream 子类):</p>
+
+<ol>
+<li>字节数组</li>
+<li>String 对象</li>
+<li>文件</li>
+<li>“管道”,它的工作原理与现实生活中的管道类似:将一些东西置入一端,它们在另一端 <br>
+出来</li>
+<li>一系列其他流,以便我们将其统一收集到单独一个流内</li>
+<li>其他起源地,如 Internet 连接等</li>
+</ol>
+
+<p>除此以外,FilterInputStream 也属于 InputStream 的一种类型,用它可为“装饰器”类提供一 <br>
+个基础类(装饰器模式), 以便将属性或者有用的接口同输入流连接到一起</p>
+
+<p>ByteArrayInputStream:允许内存中的一个缓冲区作为 InputStream,使用从中提取字节的缓冲 <br>
+区作为一个数据源使用。通过将其同一个 FilterInputStream 对象连接,可提供一个有用的接口。</p>
+
+<p>StringBufferInputStream:将一个 String 转换成 InputStream 一个 String(字串)。基础的实施 <br>
+方案实际采用一个 StringBuffer (字串缓冲)作为一个数据源使用。通过将其同一个 FilterInputStream <br>
+对象连接,可提供一个有用的接口。</p>
+
+<p>FileInputStream:用于从文件读取信息代表文件名的一个 String,或者一个 File FileDescriptor <br>
+对象作为一个数据源使用。通过将其同一个 FilterInputStream 对象连接,可提供一个有用的接口。</p>
+
+<p>PipedInputStream:读出与之相关的PipedOutputStream 写的数据。实现了“管道化”的概念。</p>
+
+<p>SequenceInputStream:将两个或更多的 InputStream 对象转换成单个 InputStream. 参数为两个 <br>
+InputStream 对象或者一个 包含InputStream的Enumeration容器. <br>
+作为一个数据源使用, 通过将其同一个 FilterInputStream 对象连接,可提供一个有用的接口.</p>
+
+<p>FilterInputStream:作为具体装饰器类的抽象类; 装饰器类为其他 InputStream 类提供了有用的功能。</p>
+
+<h5 id="4212-outputstream">4.2.1.2 OutputStream</h5>
+
+<p>这一类别包括的类决定了我们的输入往何处去:一个字节数组(但没有 String;假定我们可用 <br>
+字节数组创建一个);一个文件;或者一个“管道”。</p>
+
+<p>除此以外,FilterOutputStream 为装饰器类提供了一个基础类,它将属性或者有用的接口 <br>
+同输出流连接起来</p>
+
+<p>ByteArrayOutputStream:在内存中创建一个缓冲区。我们发送给流的所有数据都会置入这个 <br>
+缓冲区。可选缓冲区的初始大小用于指出数据的目的地。若将其同 FilterOutputStream 对象连接到 <br>
+一起,可提供一个有用的接口。</p>
+
+<p>FileOutputStream:将信息发给一个文件,用一个 String 代表文件名,或选用一个 File 或 <br>
+FileDescriptor 对象用于指出数据的目的地。若将其同 FilterOutputStream 对象连接到一起,可提供 <br>
+一个有用的接口。</p>
+
+<p>PipedOutputStream:我们写给它的任何信息都会自动会从相关的 PipedInputStream 读出。实 <br>
+现 了 “ 管 道 化 ” 的 概 念 。 PipedInputStream为多线程处理指出自己数据的目的地, 将其同 <br>
+FilterOutputStream 对象连接到一起,便可提供一个有用的接口</p>
+
+<p>FilterOutputStream 对作为装饰器接口使用的类进行抽象处理;那个装饰器为其它OutputStream <br>
+类提供了有用的功能</p>
+
+<h5 id="4213-datainputstream">4.2.1.3 DataInputStream</h5>
+
+<p>DataInputStream 从 FilterInputStream 派生, 需要传入一个InputStream. <br>
+数据输入流允许应用程序以与机器无关方式从底层输入流中读取基本 Java 数据类型。应用程 <br>
+序可以使用数据输出流写入稍后由数据输入流读取的数据。DataInputStream 对于多线程访问不一 <br>
+定是安全的。线程安全是可选的,它由此类方法的使用者负责。</p>
+
+<h5 id="4214-dataoutputstream">4.2.1.4 DataOutputStream</h5>
+
+<p>DataOutputStream 数据输出流允许应用程序以适当方式将基本 Java 数据类型写入输出流中。 <br>
+然后,应用程序可以使用数据输入流将数据读入。</p>
+
+<h4 id="422-hadoop中的io">4.2.2 Hadoop中的IO</h4>
+
+<p>在 Hadoop 中, FSInputStream(Abstract Class)、 <br>
+FSDataInputStream 和 FSDataOutputStream 的作用与 InputStream、 <br>
+DataInputStream 和 DataOutputStream 在 Java IO 中的作用类似。用 FileSystem 的 create 方法创建 <br>
+一个输出流时的返回值类型为 FSDataOutputStream,而 open 方法则返回一个 FSDataInputStream 实例。</p>
+
+<p>Hadoop 中并没有 FSOutputStream,有些FileSystem类从 OutputStream 派生实现了自己的OutputStream. <br>
+很多文件系统都会从 FSInputStream 派生出和自己特定文件系统相关的FSInputStream. <br>
+通过这种方式实现自己特定的输入输出流. 如 S3InputStream RawLocalFileSystem 等等。</p>
+
+<h2 id="5-filesystem深入分析">5 FileSystem深入分析</h2>
+
+<ul>
+<li><a href="#51-fs中的接口">5.1 fs中的接口</a></li>
+<li><a href="#52-FileSystem">5.2 FileSystem</a> <br>
+<ul><li><a href="#521-configured基类和closeable接口">5.2.1 Configured基类和Closeable接口</a></li>
+<li><a href="#522-filesystem的内部类和属性">5.2.2 FileSystem的内部类和属性</a></li>
+<li><a href="#523-文件系统的获取">5.2.3 文件系统的获取</a></li>
+<li><a href="#524-文件系统的关闭">5.2.4 文件系统的关闭</a></li>
+<li><a href="#525-读取数据">5.2.5 读取数据</a></li>
+<li><a href="#526-写入数据">5.2.6 写入数据</a></li>
+<li><a href="#527-文件操作">5.2.7 文件操作</a></li>
+<li><a href="#528-查询文件系统">5.2.8 查询文件系统</a></li>
+<li><a href="#529-其它方法">5.2.9 其它方法</a></li></ul></li>
+<li><a href="#53-filterfilesystem">5.3 FilterFileSystem</a></li>
+<li><a href="#54-checksumfilesystem">5.4 ChecksumFileSystem</a></li>
+<li><a href="#55-localfilesystem">5.5 LocalFileSystem</a></li>
+</ul>
+
+<h3 id="51-fs中的接口">5.1 fs中的接口</h3>
+
+<p>org.apache.hadoop.fs包中的接口不多，有：</p>
+
+<ul>
+<li>CanSetDropBehind - 配置流是否应该丢掉缓存</li>
+<li>CanSetReadahead - 设置预读取流</li>
+<li>FsConstants     表示文件系统有关的常量。</li>
+<li>PathFilter - 测试抽象路径名是否应该包含在某个抽象路径名表中</li>
+<li>PositionedReadable 和Seekable 提供了随机读写功能</li>
+<li>Syncable        文件同步</li>
+<li>VolumeId - 标识一个硬盘位置的接口</li>
+</ul>
+
+<h3 id="52-filesystem">5.2 FileSystem</h3>
+
+<p>FileSystem 的类图如图5-1: <br>
+<img src="./images/5-1.jpg" alt="img" title=""></p>
+
+<p>由此可见FileSystem 是一个很大的抽象类。在fs 包中，最重要的可以说是FileSystem 抽象类。 <br>
+它定义了文件系统中涉及的一些基本操作，如：create，rename ，delete… <br>
+另外包括一些分布式文件系统具有的操作：copyFromLocalFile, copyToLocalFile,… <br>
+类似于Ftp 中put 和get 操作。 <br>
+LocalFileSystem 和DistributedFileSystem，继承于此类， <br>
+分别实现了对本地文件系统和分布式文件系统的FileSystem API。</p>
+
+<h4 id="521-configured基类和closeable接口">5.2.1 Configured基类和Closeable接口</h4>
+
+<p>FileSystem 抽象类从Configured 基类派生，并实现了Closeable 接口。 <br>
+Configured 基类的源代码如下，该基类仅是简单的提供了访问配置文件的方法。</p>
+
+<pre class="prettyprint prettyprinted"><code class="language-java"><span class="kwd">public</span><span class="pln"> </span><span class="kwd">class</span><span class="pln"> </span><span class="typ">Configured</span><span class="pln"> </span><span class="kwd">implements</span><span class="pln"> </span><span class="typ">Configurable</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+
+  </span><span class="kwd">private</span><span class="pln"> </span><span class="typ">Configuration</span><span class="pln"> conf</span><span class="pun">;</span><span class="pln">
+
+  </span><span class="com">/** Construct a Configured. */</span><span class="pln">
+  </span><span class="kwd">public</span><span class="pln"> </span><span class="typ">Configured</span><span class="pun">()</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+    </span><span class="kwd">this</span><span class="pun">(</span><span class="kwd">null</span><span class="pun">);</span><span class="pln">
+  </span><span class="pun">}</span><span class="pln">
+
+  </span><span class="com">/** Construct a Configured. */</span><span class="pln">
+  </span><span class="kwd">public</span><span class="pln"> </span><span class="typ">Configured</span><span class="pun">(</span><span class="typ">Configuration</span><span class="pln"> conf</span><span class="pun">)</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+    setConf</span><span class="pun">(</span><span class="pln">conf</span><span class="pun">);</span><span class="pln">
+  </span><span class="pun">}</span><span class="pln">
+
+  </span><span class="com">// inherit javadoc</span><span class="pln">
+  </span><span class="lit">@Override</span><span class="pln">
+  </span><span class="kwd">public</span><span class="pln"> </span><span class="kwd">void</span><span class="pln"> setConf</span><span class="pun">(</span><span class="typ">Configuration</span><span class="pln"> conf</span><span class="pun">)</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+    </span><span class="kwd">this</span><span class="pun">.</span><span class="pln">conf </span><span class="pun">=</span><span class="pln"> conf</span><span class="pun">;</span><span class="pln">
+  </span><span class="pun">}</span><span class="pln">
+
+  </span><span class="com">// inherit javadoc</span><span class="pln">
+  </span><span class="lit">@Override</span><span class="pln">
+  </span><span class="kwd">public</span><span class="pln"> </span><span class="typ">Configuration</span><span class="pln"> getConf</span><span class="pun">()</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+    </span><span class="kwd">return</span><span class="pln"> conf</span><span class="pun">;</span><span class="pln">
+  </span><span class="pun">}</span><span class="pln">
+
+</span><span class="pun">}</span></code></pre>
+
+<p>Closeable接口的代码如下, 该接口主要是声明关闭流的close方法, 调用close方法释放与该流相关的所有系统资源</p>
+
+<pre class="prettyprint prettyprinted"><code class="language-java"><span class="kwd">public</span><span class="pln"> interface </span><span class="typ">Closeable</span><span class="pln"> </span><span class="kwd">extends</span><span class="pln"> </span><span class="typ">AutoCloseable</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+
+    </span><span class="com">/**
+     * Closes this stream and releases any system resources associated
+     * with it. If the stream is already closed then invoking this
+     * method has no effect.
+     *
+     * @throws IOException if an I/O error occurs
+     */</span><span class="pln">
+    </span><span class="kwd">public</span><span class="pln"> </span><span class="kwd">void</span><span class="pln"> close</span><span class="pun">()</span><span class="pln"> </span><span class="kwd">throws</span><span class="pln"> </span><span class="typ">IOException</span><span class="pun">;</span><span class="pln">
+</span><span class="pun">}</span></code></pre>
+
+<h4 id="522-filesystem的内部类和属性">5.2.2 FileSystem的内部类和属性</h4>
+
+<p>内部类有Cache, Statistics.</p>
+
+<p>FileSystem内部的属性见下面代码:</p>
+
+<pre class="prettyprint prettyprinted"><code class="language-java"><span class="kwd">public</span><span class="pln"> </span><span class="kwd">static</span><span class="pln"> </span><span class="kwd">final</span><span class="pln"> </span><span class="typ">String</span><span class="pln"> FS_DEFAULT_NAME_KEY </span><span class="pun">=</span><span class="pln">
+                 </span><span class="typ">CommonConfigurationKeys</span><span class="pun">.</span><span class="pln">FS_DEFAULT_NAME_KEY</span><span class="pun">;</span><span class="pln">
+</span><span class="kwd">public</span><span class="pln"> </span><span class="kwd">static</span><span class="pln"> </span><span class="kwd">final</span><span class="pln"> </span><span class="typ">String</span><span class="pln"> DEFAULT_FS </span><span class="pun">=</span><span class="pln">
+                 </span><span class="typ">CommonConfigurationKeys</span><span class="pun">.</span><span class="pln">FS_DEFAULT_NAME_DEFAULT</span><span class="pun">;</span><span class="pln">
+
+</span><span class="kwd">public</span><span class="pln"> </span><span class="kwd">static</span><span class="pln"> </span><span class="kwd">final</span><span class="pln"> </span><span class="typ">Log</span><span class="pln"> LOG </span><span class="pun">=</span><span class="pln"> </span><span class="typ">LogFactory</span><span class="pun">.</span><span class="pln">getLog</span><span class="pun">(</span><span class="typ">FileSystem</span><span class="pun">.</span><span class="kwd">class</span><span class="pun">);</span><span class="pln">
+
+</span><span class="com">/**
+ * Priority of the FileSystem shutdown hook.
+ */</span><span class="pln">
+</span><span class="kwd">public</span><span class="pln"> </span><span class="kwd">static</span><span class="pln"> </span><span class="kwd">final</span><span class="pln"> </span><span class="kwd">int</span><span class="pln"> SHUTDOWN_HOOK_PRIORITY </span><span class="pun">=</span><span class="pln"> </span><span class="lit">10</span><span class="pun">;</span><span class="pln">
+
+</span><span class="com">/** FileSystem cache */</span><span class="pln">
+</span><span class="kwd">static</span><span class="pln"> </span><span class="kwd">final</span><span class="pln"> </span><span class="typ">Cache</span><span class="pln"> CACHE </span><span class="pun">=</span><span class="pln"> </span><span class="kwd">new</span><span class="pln"> </span><span class="typ">Cache</span><span class="pun">();</span><span class="pln">
+
+</span><span class="com">/** The key this instance is stored under in the cache. */</span><span class="pln">
+</span><span class="kwd">private</span><span class="pln"> </span><span class="typ">Cache</span><span class="pun">.</span><span class="typ">Key</span><span class="pln"> key</span><span class="pun">;</span><span class="pln">
+
+</span><span class="com">/** Recording statistics per a FileSystem class */</span><span class="pln">
+</span><span class="kwd">private</span><span class="pln"> </span><span class="kwd">static</span><span class="pln"> </span><span class="kwd">final</span><span class="pln"> </span><span class="typ">Map</span><span class="pun">&lt;</span><span class="typ">Class</span><span class="pun">&lt;?</span><span class="pln"> </span><span class="kwd">extends</span><span class="pln"> </span><span class="typ">FileSystem</span><span class="pun">&gt;,</span><span class="pln"> </span><span class="typ">Statistics</span><span class="pun">&gt;</span><span class="pln"> 
+  statisticsTable </span><span class="pun">=</span><span class="pln">
+    </span><span class="kwd">new</span><span class="pln"> </span><span class="typ">IdentityHashMap</span><span class="pun">&lt;</span><span class="typ">Class</span><span class="pun">&lt;?</span><span class="pln"> </span><span class="kwd">extends</span><span class="pln"> </span><span class="typ">FileSystem</span><span class="pun">&gt;,</span><span class="pln"> </span><span class="typ">Statistics</span><span class="pun">&gt;();</span><span class="pln">
+
+</span><span class="com">/**
+ * The statistics for this file system.
+ */</span><span class="pln">
+</span><span class="kwd">protected</span><span class="pln"> </span><span class="typ">Statistics</span><span class="pln"> statistics</span><span class="pun">;</span><span class="pln">
+
+</span><span class="com">/**
+ * A cache of files that should be deleted when filsystem is closed
+ * or the JVM is exited.
+ */</span><span class="pln">
+</span><span class="kwd">private</span><span class="pln"> </span><span class="typ">Set</span><span class="pun">&lt;</span><span class="typ">Path</span><span class="pun">&gt;</span><span class="pln"> deleteOnExit </span><span class="pun">=</span><span class="pln"> </span><span class="kwd">new</span><span class="pln"> </span><span class="typ">TreeSet</span><span class="pun">&lt;</span><span class="typ">Path</span><span class="pun">&gt;();</span><span class="pln">
+
+</span><span class="kwd">boolean</span><span class="pln"> resolveSymlinks</span><span class="pun">;</span></code></pre>
+
+<h5 id="5221-cache">5.2.2.1 Cache</h5>
+
+<p>FileSystem 内部类 Cache 用来缓存文件系统对象。</p>
+
+<p>Cache成员, 方法见下图:</p>
+
+<p><img src="./images/5-2.png" alt="img" title=""></p>
+
+<p>在检索文件系统时,如果缓存未被禁用,则会首先从缓存中读取。</p>
+
+<p>Cache 中有两个内部类,ClientFinalizer 和 Key。</p>
+
+<p>ClientFinalizer类:</p>
+
+<p><img src="./images/5-3.png" alt="img" title=""></p>
+
+<p>ClientFinalizer类为一线程类,当Java虚拟机停止运行时,该线程才会运行。而运行时,run <br>
+方法会调用 Cache.closeAll(true)方法,进行清理工作。</p>
+
+<p>内部静态类Key,顾名思意,它作为Cache中HashMap<key, filesystem="">的关键字。保存了 <br>
+有关文件系统的 Uri 的信息,而其中的各个方法也是简单明了。</key,></p>
+
+<p><img src="./images/5-4.png" alt="img" title=""></p>
+
+<p>Cache类中的集合toAutoClose属性用来表示是否需要自动关闭Key所对应的文件系统。 <br>
+Cache方法get()和getUnique()内部仅简单地调用了getInternal()方法。 <br>
+其代码所下：</p>
+
+<pre class="prettyprint prettyprinted"><code class="language-java"><span class="kwd">private</span><span class="pln"> </span><span class="typ">FileSystem</span><span class="pln"> getInternal</span><span class="pun">(</span><span class="pln">URI uri</span><span class="pun">,</span><span class="pln"> </span><span class="typ">Configuration</span><span class="pln"> conf</span><span class="pun">,</span><span class="pln"> </span><span class="typ">Key</span><span class="pln"> key</span><span class="pun">)</span><span class="pln"> </span><span class="kwd">throws</span><span class="pln"> </span><span class="typ">IOException</span><span class="pun">{</span><span class="pln">
+  </span><span class="typ">FileSystem</span><span class="pln"> fs</span><span class="pun">;</span><span class="pln">
+  </span><span class="kwd">synchronized</span><span class="pln"> </span><span class="pun">(</span><span class="kwd">this</span><span class="pun">)</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+    fs </span><span class="pun">=</span><span class="pln"> map</span><span class="pun">.</span><span class="pln">get</span><span class="pun">(</span><span class="pln">key</span><span class="pun">);</span><span class="pln">
+  </span><span class="pun">}</span><span class="pln">
+  </span><span class="kwd">if</span><span class="pln"> </span><span class="pun">(</span><span class="pln">fs </span><span class="pun">!=</span><span class="pln"> </span><span class="kwd">null</span><span class="pun">)</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+    </span><span class="kwd">return</span><span class="pln"> fs</span><span class="pun">;</span><span class="pln">
+  </span><span class="pun">}</span><span class="pln">
+
+  fs </span><span class="pun">=</span><span class="pln"> createFileSystem</span><span class="pun">(</span><span class="pln">uri</span><span class="pun">,</span><span class="pln"> conf</span><span class="pun">);</span><span class="pln">
+  </span><span class="kwd">synchronized</span><span class="pln"> </span><span class="pun">(</span><span class="kwd">this</span><span class="pun">)</span><span class="pln"> </span><span class="pun">{</span><span class="pln"> </span><span class="com">// refetch the lock again</span><span class="pln">
+    </span><span class="typ">FileSystem</span><span class="pln"> oldfs </span><span class="pun">=</span><span class="pln"> map</span><span class="pun">.</span><span class="pln">get</span><span class="pun">(</span><span class="pln">key</span><span class="pun">);</span><span class="pln">
+    </span><span class="kwd">if</span><span class="pln"> </span><span class="pun">(</span><span class="pln">oldfs </span><span class="pun">!=</span><span class="pln"> </span><span class="kwd">null</span><span class="pun">)</span><span class="pln"> </span><span class="pun">{</span><span class="pln"> </span><span class="com">// a file system is created while lock is releasing</span><span class="pln">
+      fs</span><span class="pun">.</span><span class="pln">close</span><span class="pun">();</span><span class="pln"> </span><span class="com">// close the new file system</span><span class="pln">
+      </span><span class="kwd">return</span><span class="pln"> oldfs</span><span class="pun">;</span><span class="pln">  </span><span class="com">// return the old file system</span><span class="pln">
+    </span><span class="pun">}</span><span class="pln">
+
+    </span><span class="com">// now insert the new file system into the map</span><span class="pln">
+    </span><span class="kwd">if</span><span class="pln"> </span><span class="pun">(</span><span class="pln">map</span><span class="pun">.</span><span class="pln">isEmpty</span><span class="pun">()</span><span class="pln">
+            </span><span class="pun">&amp;&amp;</span><span class="pln"> </span><span class="pun">!</span><span class="typ">ShutdownHookManager</span><span class="pun">.</span><span class="pln">get</span><span class="pun">().</span><span class="pln">isShutdownInProgress</span><span class="pun">())</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+      </span><span class="typ">ShutdownHookManager</span><span class="pun">.</span><span class="pln">get</span><span class="pun">().</span><span class="pln">addShutdownHook</span><span class="pun">(</span><span class="pln">clientFinalizer</span><span class="pun">,</span><span class="pln"> SHUTDOWN_HOOK_PRIORITY</span><span class="pun">);</span><span class="pln">
+    </span><span class="pun">}</span><span class="pln">
+    fs</span><span class="pun">.</span><span class="pln">key </span><span class="pun">=</span><span class="pln"> key</span><span class="pun">;</span><span class="pln">
+    map</span><span class="pun">.</span><span class="pln">put</span><span class="pun">(</span><span class="pln">key</span><span class="pun">,</span><span class="pln"> fs</span><span class="pun">);</span><span class="pln">
+    </span><span class="kwd">if</span><span class="pln"> </span><span class="pun">(</span><span class="pln">conf</span><span class="pun">.</span><span class="pln">getBoolean</span><span class="pun">(</span><span class="str">"fs.automatic.close"</span><span class="pun">,</span><span class="pln"> </span><span class="kwd">true</span><span class="pun">))</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+          toAutoClose</span><span class="pun">.</span><span class="pln">add</span><span class="pun">(</span><span class="pln">key</span><span class="pun">);</span><span class="pln">
+        </span><span class="pun">}</span><span class="pln">
+        </span><span class="kwd">return</span><span class="pln"> fs</span><span class="pun">;</span><span class="pln">
+  </span><span class="pun">}</span><span class="pln">
+</span><span class="pun">}</span></code></pre>
+
+<p>在getInternal中调用FileSystem.createFileSystem打开一个文件系统</p>
+
+<pre class="prettyprint prettyprinted"><code class="language-java"><span class="kwd">private</span><span class="pln"> </span><span class="kwd">static</span><span class="pln"> </span><span class="typ">FileSystem</span><span class="pln"> createFileSystem</span><span class="pun">(</span><span class="pln">URI uri</span><span class="pun">,</span><span class="pln"> </span><span class="typ">Configuration</span><span class="pln"> conf
+     </span><span class="pun">)</span><span class="pln"> </span><span class="kwd">throws</span><span class="pln"> </span><span class="typ">IOException</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+   </span><span class="typ">Class</span><span class="pun">&lt;?&gt;</span><span class="pln"> clazz </span><span class="pun">=</span><span class="pln"> getFileSystemClass</span><span class="pun">(</span><span class="pln">uri</span><span class="pun">.</span><span class="pln">getScheme</span><span class="pun">(),</span><span class="pln"> conf</span><span class="pun">);</span><span class="pln">
+   </span><span class="kwd">if</span><span class="pln"> </span><span class="pun">(</span><span class="pln">clazz </span><span class="pun">==</span><span class="pln"> </span><span class="kwd">null</span><span class="pun">)</span><span class="pln"> </span><span class="pun">{</span><span class="pln">
+     </span><span class="kwd">throw</span><span class="pln"> </span><span class="kwd">new</span><span class="pln"> </span><span class="typ">IOException</span><span class="pun">(</span><span class="str">"No FileSystem for scheme: "</span><span class="pln"> </span><span class="pun">+</span><span class="pln"> uri</span><span class="pun">.</span><span class="pln">getScheme</span><span class="pun">());</span><span class="pln">
+   </span><span class="pun">}</span><span class="pln">
+   </span><span class="typ">FileSystem</span><span class="pln"> fs </span><span class="pun">=</span><span class="pln"> </span><span class="pun">(</span><span class="typ">FileSystem</span><span class="pun">)</span><span class="typ">ReflectionUtils</span><span class="pun">.</span><span class="pln">newInstance</span><span class="pun">(</span><span class="pln">clazz</span><span class="pun">,</span><span class="pln"> conf</span><span class="pun">);</span><span class="pln">
+   fs</span><span class="pun">.</span><span class="pln">initialize</span><span class="pun">(</span><span class="pln">uri</span><span class="pun">,</span><span class="pln"> conf</span><span class="pun">);</span><span class="pln">
+   </span><span class="kwd">return</span><span class="pln"> fs</span><span class="pun">;</span><span class="pln">
+</span><span class="pun">}</span></code></pre>
+
+<p>ReflectionUtils.newInstance()则利用 Java 的反射机制,调用 clazz 的构造函数,设置配置文件</p>
+
+<p>后,将生成的对象返回。</p>
+
+<p>Cache方法 synchronized void remove(Key key, FileSystem fs)用来从映射 map 中删除相应的 key 和 fs <br>
+对应的映射。</p>
+
+<p>Cache方法 synchronized void closeAll(boolean onlyAutomatic) throws IOException 用来删除所有的映 <br>
+射,并调用文件系统的 close()方法。当 onlyAutomatic 为 true 时,仅删除在集合 toAutoClose 中含 <br>
+有的键值对。</p>
+
+<h4 id="523-文件系统的获取">5.2.3 文件系统的获取</h4>
+
+<h4 id="524-文件系统的关闭">5.2.4 文件系统的关闭</h4>
+
+<h4 id="525-读取数据">5.2.5 读取数据</h4>
+
+<h4 id="526-写入数据">5.2.6 写入数据</h4>
+
+<h4 id="527-文件操作">5.2.7 文件操作</h4>
+
+<h4 id="528-查询文件系统">5.2.8 查询文件系统</h4>
+
+<h4 id="529-其它方法">5.2.9 其它方法</h4>
+
+<h3 id="53-filterfilesystem">5.3 FilterFileSystem</h3>
+
+<h3 id="54-checksumfilesystem">5.4 ChecksumFileSystem</h3>
+
+<h3 id="55-localfilesystem">5.5 LocalFileSystem</h3></div></body>
+</html>
