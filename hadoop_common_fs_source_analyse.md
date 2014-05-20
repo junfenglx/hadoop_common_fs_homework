@@ -220,7 +220,7 @@ Hadoop 中并没有 FSOutputStream,有些FileSystem类从 OutputStream 派生实
 --------------------
 * [5.1 fs中的接口](#51-fs中的接口)
 * [5.2 FileSystem](#52-FileSystem)
-    * [5.2.1 Configured基类和Closeable接口](#521-Configured基类和Closeable接口)
+    * [5.2.1 Configured基类和Closeable接口](#521-configured基类和closeable接口)
     * [5.2.2 FileSystem的内部类和属性](#522-filesystem的内部类和属性)
     * [5.2.3 文件系统的获取](#523-文件系统的获取)
     * [5.2.4 文件系统的关闭](#524-文件系统的关闭)
@@ -306,17 +306,147 @@ public interface Closeable extends AutoCloseable {
 ```
 
 ####5.2.2 FileSystem的内部类和属性
+内部类有Cache, Statistics.
 
-5.2.3 文件系统的获取
-5.2.4 文件系统的关闭
-5.2.5 读取数据
-5.2.6 写入数据
-5.2.7 文件操作
-5.2.8 查询文件系统
-5.2.9 其它方法
-5.3 FilterFileSystem
-5.4 ChecksumFileSystem
-5.5 LocalFileSystem
+FileSystem内部的属性见下面代码:
+```java
+public static final String FS_DEFAULT_NAME_KEY =
+                 CommonConfigurationKeys.FS_DEFAULT_NAME_KEY;
+public static final String DEFAULT_FS =
+                 CommonConfigurationKeys.FS_DEFAULT_NAME_DEFAULT;
+
+public static final Log LOG = LogFactory.getLog(FileSystem.class);
+
+/**
+ * Priority of the FileSystem shutdown hook.
+ */
+public static final int SHUTDOWN_HOOK_PRIORITY = 10;
+
+/** FileSystem cache */
+static final Cache CACHE = new Cache();
+
+/** The key this instance is stored under in the cache. */
+private Cache.Key key;
+
+/** Recording statistics per a FileSystem class */
+private static final Map<Class<? extends FileSystem>, Statistics> 
+  statisticsTable =
+    new IdentityHashMap<Class<? extends FileSystem>, Statistics>();
+ 
+/**
+ * The statistics for this file system.
+ */
+protected Statistics statistics;
+
+/**
+ * A cache of files that should be deleted when filsystem is closed
+ * or the JVM is exited.
+ */
+private Set<Path> deleteOnExit = new TreeSet<Path>();
+ 
+boolean resolveSymlinks;
+```
+
+#####5.2.2.1 Cache
+FileSystem 内部类 Cache 用来缓存文件系统对象。
+
+Cache成员, 方法见下图:
+![img][5-2.png]
+在检索文件系统时,如果缓存未被禁用,则会首先从缓存中读取。
+
+Cache 中有两个内部类,ClientFinalizer 和 Key。
+
+ClientFinalizer类:
+![img][5-3.png]
+ClientFinalizer类为一线程类,当Java虚拟机停止运行时,该线程才会运行。而运行时,run
+方法会调用 Cache.closeAll(true)方法,进行清理工作。
+
+内部静态类Key,顾名思意,它作为Cache中HashMap<Key, FileSystem>的关键字。保存了
+有关文件系统的 Uri 的信息,而其中的各个方法也是简单明了。
+![img][5-4.png]
+
+Cache类中的集合toAutoClose属性用来表示是否需要自动关闭Key所对应的文件系统。
+Cache方法get()和getUnique()内部仅简单地调用了getInternal()方法。
+其代码所下：
+
+```java
+private FileSystem getInternal(URI uri, Configuration conf, Key key) throws IOException{
+  FileSystem fs;
+  synchronized (this) {
+    fs = map.get(key);
+  }
+  if (fs != null) {
+    return fs;
+  }
+
+  fs = createFileSystem(uri, conf);
+  synchronized (this) { // refetch the lock again
+    FileSystem oldfs = map.get(key);
+    if (oldfs != null) { // a file system is created while lock is releasing
+      fs.close(); // close the new file system
+      return oldfs;  // return the old file system
+    }
+
+    // now insert the new file system into the map
+    if (map.isEmpty()
+            && !ShutdownHookManager.get().isShutdownInProgress()) {
+      ShutdownHookManager.get().addShutdownHook(clientFinalizer, SHUTDOWN_HOOK_PRIORITY);
+    }
+    fs.key = key;
+    map.put(key, fs);
+    if (conf.getBoolean("fs.automatic.close", true)) {
+          toAutoClose.add(key);
+        }
+        return fs;
+  }
+}
+```
+
+在getInternal中调用FileSystem.createFileSystem打开一个文件系统
+
+```java
+private static FileSystem createFileSystem(URI uri, Configuration conf
+     ) throws IOException {
+   Class<?> clazz = getFileSystemClass(uri.getScheme(), conf);
+   if (clazz == null) {
+     throw new IOException("No FileSystem for scheme: " + uri.getScheme());
+   }
+   FileSystem fs = (FileSystem)ReflectionUtils.newInstance(clazz, conf);
+   fs.initialize(uri, conf);
+   return fs;
+}
+```
+ReflectionUtils.newInstance()则利用 Java 的反射机制,调用 clazz 的构造函数,设置配置文件
+
+后,将生成的对象返回。
+
+Cache方法 synchronized void remove(Key key, FileSystem fs)用来从映射 map 中删除相应的 key 和 fs
+对应的映射。
+
+Cache方法 synchronized void closeAll(boolean onlyAutomatic) throws IOException 用来删除所有的映
+射,并调用文件系统的 close()方法。当 onlyAutomatic 为 true 时,仅删除在集合 toAutoClose 中含
+有的键值对。
+
+####5.2.3 文件系统的获取
+
+####5.2.4 文件系统的关闭
+
+####5.2.5 读取数据
+
+####5.2.6 写入数据
+
+####5.2.7 文件操作
+
+####5.2.8 查询文件系统
+
+####5.2.9 其它方法
+
+###5.3 FilterFileSystem
+
+###5.4 ChecksumFileSystem
+
+###5.5 LocalFileSystem
+
 
 
   [3-1.jpg]: ./images/3-1.jpg
@@ -326,3 +456,6 @@ public interface Closeable extends AutoCloseable {
   [4-3.png]: ./images/4-3.png
   [4-4.png]: ./images/4-4.png
   [5-1.jpg]: ./images/5-1.jpg
+  [5-2.png]: ./images/5-2.png
+  [5-3.png]: ./images/5-3.png
+  [5-4.png]: ./images/5-4.png
