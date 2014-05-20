@@ -256,6 +256,69 @@ LocalFileSystem 和DistributedFileSystem，继承于此类，
 分别实现了对本地文件系统和分布式文件系统的FileSystem API。
 
 
+####5.2.1 Configured基类和Closeable接口
+FileSystem 抽象类从Configured 基类派生，并实现了Closeable 接口。
+Configured 基类的源代码如下，该基类仅是简单的提供了访问配置文件的方法。
+
+```java
+public class Configured implements Configurable {
+
+  private Configuration conf;
+
+  /** Construct a Configured. */
+  public Configured() {
+    this(null);
+  }
+
+  /** Construct a Configured. */
+  public Configured(Configuration conf) {
+    setConf(conf);
+  }
+
+  // inherit javadoc
+  @Override
+  public void setConf(Configuration conf) {
+    this.conf = conf;
+  }
+
+  // inherit javadoc
+  @Override
+  public Configuration getConf() {
+    return conf;
+  }
+
+}
+```
+Closeable接口的代码如下, 该接口主要是声明关闭流的close方法, 调用close方法释放与该流相关的所有系统资源
+
+```java
+public interface Closeable extends AutoCloseable {
+
+    /**
+     * Closes this stream and releases any system resources associated
+     * with it. If the stream is already closed then invoking this
+     * method has no effect.
+     *
+     * @throws IOException if an I/O error occurs
+     */
+    public void close() throws IOException;
+}
+```
+
+####5.2.2 FileSystem的内部类和属性
+
+5.2.3 文件系统的获取
+5.2.4 文件系统的关闭
+5.2.5 读取数据
+5.2.6 写入数据
+5.2.7 文件操作
+5.2.8 查询文件系统
+5.2.9 其它方法
+5.3 FilterFileSystem
+5.4 ChecksumFileSystem
+5.5 LocalFileSystem
+
+
   [3-1.jpg]: ./images/3-1.jpg
   [4-1.png]: ./images/4-1.png
   [4-2.png]: ./images/4-2.png
