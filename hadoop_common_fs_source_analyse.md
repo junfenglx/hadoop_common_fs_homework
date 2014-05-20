@@ -235,6 +235,7 @@ Hadoop 中并没有 FSOutputStream,有些FileSystem类从 OutputStream 派生实
 
 ###5.1 fs中的接口
 org.apache.hadoop.fs包中的接口不多，有：
+
 * CanSetDropBehind - 配置流是否应该丢掉缓存
 * CanSetReadahead - 设置预读取流
 * FsConstants     表示文件系统有关的常量。
@@ -244,6 +245,15 @@ org.apache.hadoop.fs包中的接口不多，有：
 * VolumeId - 标识一个硬盘位置的接口
 
 ###5.2 FileSystem
+FileSystem 的类图如图5-1:
+![img][5-1.jpg]
+
+由此可见FileSystem 是一个很大的抽象类。在fs 包中，最重要的可以说是FileSystem 抽象类。
+它定义了文件系统中涉及的一些基本操作，如：create，rename ，delete...
+另外包括一些分布式文件系统具有的操作：copyFromLocalFile, copyToLocalFile,...
+类似于Ftp 中put 和get 操作。
+LocalFileSystem 和DistributedFileSystem，继承于此类，
+分别实现了对本地文件系统和分布式文件系统的FileSystem API。
 
 
   [3-1.jpg]: ./images/3-1.jpg
@@ -252,3 +262,4 @@ org.apache.hadoop.fs包中的接口不多，有：
   [S3]: http://aws.amazon.com/s3
   [4-3.png]: ./images/4-3.png
   [4-4.png]: ./images/4-4.png
+  [5-1.jpg]: ./images/5-1.jpg
