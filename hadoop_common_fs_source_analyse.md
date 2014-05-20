@@ -3,11 +3,13 @@
 
 [1 修订记录](#1-修订记录)
 
-[2 摘要](2-摘要)
+[2 摘要](#2-摘要)
 
 [3 org.apache.hadoop.fs包总述](#3-orgapachehadoopfs包总述)
 
 [4 Hadoop文件系统概述](#4-hadoop文件系统概述)
+
+[5 FileSystem深入分析](#5-filesystem深入分析)
 
 1 修订记录
 ----------
@@ -213,6 +215,24 @@ DataInputStream 和 DataOutputStream 在 Java IO 中的作用类似。用 FileSy
 Hadoop 中并没有 FSOutputStream,有些FileSystem类从 OutputStream 派生实现了自己的OutputStream.
 很多文件系统都会从 FSInputStream 派生出和自己特定文件系统相关的FSInputStream.
 通过这种方式实现自己特定的输入输出流. 如 S3InputStream RawLocalFileSystem 等等。
+
+5 FileSystem深入分析
+--------------------
+* [5.1 fs中的接口](#51-fs中的接口)
+* [5.2 FileSystem](#52-FileSystem)
+    * [5.2.1 Configured基类和Closeable接口](#521-Configured基类和Closeable接口)
+    * [5.2.2 FileSystem的内部类和属性](#522-filesystem的内部类和属性)
+    * [5.2.3 文件系统的获取](#523-文件系统的获取)
+    * [5.2.4 文件系统的关闭](#524-文件系统的关闭)
+    * [5.2.5 读取数据](#525-读取数据)
+    * [5.2.6 写入数据](#526-写入数据)
+    * [5.2.7 文件操作](#527-文件操作)
+    * [5.2.8 查询文件系统](#528-查询文件系统)
+    * [5.2.9 其它方法](#529-其它方法)
+* [5.3 FilterFileSystem](#53-filterfilesystem)
+* [5.4 ChecksumFileSystem](#54-checksumfilesystem)
+* [5.5 LocalFileSystem](#55-localfilesystem)
+
 
   [3-1.jpg]: ./images/3-1.jpg
   [4-1.png]: ./images/4-1.png
