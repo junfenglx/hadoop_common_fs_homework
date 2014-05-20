@@ -351,18 +351,23 @@ boolean resolveSymlinks;
 FileSystem 内部类 Cache 用来缓存文件系统对象。
 
 Cache成员, 方法见下图:
+
 ![img][5-2.png]
+
 在检索文件系统时,如果缓存未被禁用,则会首先从缓存中读取。
 
 Cache 中有两个内部类,ClientFinalizer 和 Key。
 
 ClientFinalizer类:
+
 ![img][5-3.png]
+
 ClientFinalizer类为一线程类,当Java虚拟机停止运行时,该线程才会运行。而运行时,run
 方法会调用 Cache.closeAll(true)方法,进行清理工作。
 
 内部静态类Key,顾名思意,它作为Cache中HashMap<Key, FileSystem>的关键字。保存了
 有关文件系统的 Uri 的信息,而其中的各个方法也是简单明了。
+
 ![img][5-4.png]
 
 Cache类中的集合toAutoClose属性用来表示是否需要自动关闭Key所对应的文件系统。
