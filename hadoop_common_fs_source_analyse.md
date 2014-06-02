@@ -945,7 +945,7 @@ public interface Progressable {
 ```
 
 #####5.2.7.2 文件删除
-件删除使用抽象方法delete()实现，其代码如下所示，
+删除使用抽象方法delete()实现，其代码如下所示，
 0.21 版本以前使用非抽象方法delete()方法实现。
 但现在该方法已经不再推荐使用。
 
@@ -1180,7 +1180,67 @@ moveFromLocalFile, moveToLocalFile分别在内部调用copyFromLocalFile, copyTo
 
 ####5.2.8 查询文件系统
 
+#####5.2.8.1 文件元数据：FileStatus
+任何文件系统的一个重要特征是定位其目录结构及检索其存储的文件和目录信息的能力。
+FileStatus是一个简单的类，封装了文件系统中文件和目录的元数据，包括文件长度、块大小、副
+本、修改时间、所有者以及许可信息。FileStatus实现了Writeable 接口，可以序列化。
 
+类图见图5-5:
+![img][5-5.jpg]
+
+FileSystem 的getFileStatus() 提供了获取一个文件或目录的状态对象的方法。
+
+#####5.2.8.2 列出文件
+查找一个文件或目录的信息很实用，但有时我们还需要能够列出目录的内容。这就是listStatus()方法的功能：
+
+1. public abstract FileStatus[] listStatus(Path f) throws IOException
+2. public FileStatus[] listStatus(Path f, PathFilter filter) throws IOException
+3. public FileStatus[] listStatus(Path[] files) throws IOException
+4. public FileStatus[] listStatus(Path[] files, PathFilter filter) throws IOException
+
+传入参数是一个文件时，它会简单地返回长度为1 的FileStatus对象的一个数组。当传入参数是一个目录时，它会返回0 或者多个FileStatus对象，代表着此目录所包含的文件和目录。 
+重载方法允许我们使用PathFilter 来限制匹配的文件和目录。
+
+如果把路径数组作为参数来调用listStatus 方法，其结果是与依次对每个路径调用此方法，
+再将 FileStatus对象数组收集在一个单一数组中的结果是相同的，但是前者更为方便。
+这在建立从文件系统树的不同部分执行的输入文件的列表时很有用.
+
+#####5.2.8.3 文件格式
+在一步操作中处理批量文件，这个要求很常见。
+举例来说，处理日志的MapReduce 作业可能会分析一个月的文件，这些文件被包含在大量目录中。
+Hadoop有一个通配的操作，可以方便地使用通配符在一个表达式中核对多个文件，不需要列举每个文件和目录来指定输入。
+Hadoop为执行通配提供了两个FileSystem 方法：
+
+1. public FileStatus[] globStatus(Path pathPattern) throws IOException
+2. public FileStatus[] globStatus(Path pathPattern,PathFilter filter) throws IOException
+   globStatus() 返回了其路径匹配于所供格式的FileStatus对象数组，按路径排序。可选的PathFilter命令可以进一步指定限制匹配。
+
+正则语法见图5-6:
+
+![img][5-6.png]
+
+**PathFilter 对象**
+
+通配格式不是总能够精确地描述我们想要访问的文件集合。
+比如，使用通配格式排除一个特定的文件就不太可能。
+FileSystem 中的listStatus() 和globStatus() 方法提供了可选的PathFilter 对象，
+使我们能够通过编程方式控制匹配：
+
+PathFilter 代码如下:
+
+```java
+public interface PathFilter {
+  /**
+   * Tests whether or not the specified abstract pathname should be
+   * included in a pathname list.
+   *
+   * @param  path  The abstract pathname to be tested
+   * @return  <code>true</code> if and only if <code>pathname</code>
+   *          should be included
+   */
+  boolean accept(Path path);
+}
+```
 ####5.2.9 其它方法
 1. 默认的文件系统uri通过public static URI getDefau ltUri(Configuration conf) 来获取；
    通过  public static void setDefaultUri(Configuration conf, URI uri) 和public static void setDefaultUri(Configuration conf, String uri)来设置。
@@ -1196,12 +1256,136 @@ moveFromLocalFile, moveToLocalFile分别在内部调用copyFromLocalFile, copyTo
 9. public Path getHomeDirectory() 等等。
 
 ###5.3 FilterFileSystem
+FilterFileSystem 的类图如图5-7：
+
+![img][5-7.jpg]
+
+FilterFileSystem 类包含了一个其它的文件系统的实例fs ，并将其作为基本的文件系统。
+FilterFileSystem 类几乎将所有重写的方法交给了其内部保存的fs 来处理。
+但在交给fs 处理之前，自己可以做一些处理，以此来实现过滤。
+
+举例代码如下:
+
+```java
+  /** Called after a new FileSystem instance is constructed.
+   * @param name a uri whose authority section names the host, port, etc.
+   *   for this FileSystem
+   * @param conf the configuration
+   */
+  @Override
+  public void initialize(URI name, Configuration conf) throws IOException {
+    super.initialize(name, conf);
+    // this is less than ideal, but existing filesystems sometimes neglect
+    // to initialize the embedded filesystem
+    if (fs.getConf() == null) {
+      fs.initialize(name, conf);
+    }
+    String scheme = name.getScheme();
+    if (!scheme.equals(fs.getUri().getScheme())) {
+      swapScheme = scheme;
+    }
+  }
+
+  /** Returns a URI whose scheme and authority identify this FileSystem.*/
+  @Override
+  public URI getUri() {
+    return fs.getUri();
+  }
+```
+
+其余方法类似
+
+其实FilterFileSystem实现的是*装饰器模式*
 
 ###5.4 ChecksumFileSystem
+ChecksumFileSystem 类为文件系统提供了校验和的功能, 类图见图5-8
+
+![img][5-8.jpg]
+
+HDFS 以透明方式校验所有写入它的数据，并在默认设置下，会在读取数据时验证校验和。
+
+针对数据的每个io.bytes.per.checksum 字节，都会创建一个单独的校验和。默认值为512 字节，使用CRC-32校验和，存储开销为1%。
+
+每一个原始文件都有一个校验和文件，比如文件 /a/b/c.txt  对应的校验和文件为/a/b/.c.txt.crc 。
+校验和文件默认是隐藏的文件，即在文件名“c.txt” 前加上一个“. ”，并在文件名“c.txt”后面加上后缀“.crc ”。
+
+ChecksumFileSystem 类中的属性CHECKSUM_VERSION 为写入校验和文件的文件头中的版本号。verifyChecksum 表示是否需要检测校验和。
+
+ChecksumFileSystem 中有两个内部类ChecksumFSInputChecker 和ChecksumFSOutputSummer。详见后面分析。
+
+ChecksumFileSystem 类open 和create 方法的实现如下，仅是简单的创建一个FSDataInputStream和FSDataOutputStream 。
+
+```java
+  /**
+   * Opens an FSDataInputStream at the indicated Path.
+   * @param f the file name to open
+   * @param bufferSize the size of the buffer to be used.
+   */
+  @Override
+  public FSDataInputStream open(Path f, int bufferSize) throws IOException {
+    FileSystem fs;
+    InputStream in;
+    if (verifyChecksum) {
+      fs = this;
+      in = new ChecksumFSInputChecker(this, f, bufferSize);
+    } else {
+      fs = getRawFileSystem();
+      in = fs.open(f, bufferSize);
+    }
+    return new FSDataBoundedInputStream(fs, f, in);
+  }
+
+  @Override
+  public FSDataOutputStream create(Path f, FsPermission permission,
+      boolean overwrite, int bufferSize, short replication, long blockSize,
+      Progressable progress) throws IOException {
+    return create(f, permission, overwrite, true, bufferSize,
+        replication, blockSize, progress);
+  }
+
+  private FSDataOutputStream create(Path f, FsPermission permission,
+      boolean overwrite, boolean createParent, int bufferSize,
+      short replication, long blockSize,
+      Progressable progress) throws IOException {
+    Path parent = f.getParent();
+    if (parent != null) {
+      if (!createParent && !exists(parent)) {
+        throw new FileNotFoundException("Parent directory doesn't exist: "
+            + parent);
+      } else if (!mkdirs(parent)) {
+        throw new IOException("Mkdirs failed to create " + parent);
+      }
+    }
+    final FSDataOutputStream out;
+    if (writeChecksum) {
+      out = new FSDataOutputStream(
+          new ChecksumFSOutputSummer(this, f, overwrite, bufferSize, replication,
+              blockSize, progress), null);
+    } else {
+      out = fs.create(f, permission, overwrite, bufferSize, replication,
+          blockSize, progress);
+      // remove the checksum file since we aren't writing one
+      Path checkFile = getChecksumFile(f);
+      if (fs.exists(checkFile)) {
+        fs.delete(checkFile, true);
+      }
+    }
+    if (permission != null) {
+      setPermission(f, permission);
+    }
+    return out;
+  }
+```
 
 ###5.5 LocalFileSystem
+类图如图5-9
 
+![img][5-9.jpg]
 
+LocalFileSystem 从ChecksumFileSystem 类派生，主要实现其它一些支持校验和文件系统的API。
+
+LocalFileSystem 有一个属性rfs，用来表原生的文件系统。LocalFileSystem 重写了一些方法，
+如copyFromLocalFile 和copyToLocalFile 等。
 
   [3-1.jpg]: ./images/3-1.jpg
   [4-1.png]: ./images/4-1.png
@@ -1213,3 +1397,8 @@ moveFromLocalFile, moveToLocalFile分别在内部调用copyFromLocalFile, copyTo
   [5-2.png]: ./images/5-2.png
   [5-3.png]: ./images/5-3.png
   [5-4.png]: ./images/5-4.png
+  [5-5.jpg]: ./images/5-5.jpg
+  [5-6.png]: ./images/5-6.png
+  [5-7.jpg]: ./images/5-7.jpg
+  [5-8.jpg]: ./images/5-8.jpg
+  [5-9.jpg]: ./images/5-9.jpg
