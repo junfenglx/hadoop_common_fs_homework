@@ -28,6 +28,7 @@
 Hadoop是一个用于在通用硬件集群上进行大数据存储和处理的开源软件框架．
 
 它主要包括以下几个模块：
+
 * Hadoop Common. 包含其它模块需要的库和一些实用程序
 * Hadoop Distributed File System (HDFS). 一个把数据存储在通用硬件的分布
 式文件系统．在集群内能提供非常高的总计带宽
@@ -78,6 +79,7 @@ fs各子包下的类继承层次结构如图4-2所示:
 ![img][4-2.png]
 
 除 FilterFileSystem 外,FileSystem 的直接子类都是跟具体文件系统交互的类。包括以下子类:
+
 * 由FileSystem派生:
     * S3FileSystem(org.apache.hadoop.fs.s3) - 数据以块形式存储在[Amazon S3][S3]
     * NativeS3FileSystem(org.apache.hadoop.fs.s3) - 文件以原生格式存储在[Amazon S3][S3]
@@ -95,6 +97,7 @@ fs各子包下的类继承层次结构如图4-2所示:
     * Hdfs - 为Hadoop DistributedFileSystem实现了AbstractFileSystem API
 
 *注解:*
+
 * LocalFileSystem是加上Checksum功能的本地文件系统，该类和操作系统本地文件系统交互，内部使用RawLocalFileSystem.
 RawLocalFileSystem是代表没有Checksum功能的操作系统本地文件系统．
 * 继承自AbstractFileSystem的LocalFS和RawLocalFs结构同上．其内部实现被委派给RawLocalFileSystem.
