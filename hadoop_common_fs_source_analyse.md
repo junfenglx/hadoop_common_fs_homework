@@ -433,18 +433,767 @@ Cache方法 synchronized void closeAll(boolean onlyAutomatic) throws IOException
 有的键值对。
 
 ####5.2.3 文件系统的获取
+FileSystem 是一个普通的文件系统API，所以首要任务是检索我们要用的文件系统实例。
+取得FileSystem 实例有三种静态工厂方法get() 。
+这些 get() 方法是Hadoop 0.21版本之前就存在的，但在0.21 版本中又添加了与之功能相同的三个方法newInstance() 。
+
+get() 方法如下：
+
+```java
+  /**
+   * Get a filesystem instance based on the uri, the passed
+   * configuration and the user
+   * @param uri of the filesystem
+   * @param conf the configuration to use
+   * @param user to perform the get as
+   * @return the filesystem instance
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  public static FileSystem get(final URI uri, final Configuration conf,
+        final String user) throws IOException, InterruptedException {
+    String ticketCachePath =
+      conf.get(CommonConfigurationKeys.KERBEROS_TICKET_CACHE_PATH);
+    UserGroupInformation ugi =
+        UserGroupInformation.getBestUGI(ticketCachePath, user);
+    return ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
+      @Override
+      public FileSystem run() throws IOException {
+        return get(uri, conf);
+      }
+    });
+  }
+
+  /**
+   * Returns the configured filesystem implementation.
+   * @param conf the configuration to use
+   */
+  public static FileSystem get(Configuration conf) throws IOException {
+    return get(getDefaultUri(conf), conf);
+  }
+
+  public static FileSystem get(URI uri, Configuration conf) throws IOException {
+    String scheme = uri.getScheme();
+    String authority = uri.getAuthority();
+
+    if (scheme == null && authority == null) {     // use default FS
+      return get(conf);
+    }
+
+    if (scheme != null && authority == null) {     // no authority
+      URI defaultUri = getDefaultUri(conf);
+      if (scheme.equals(defaultUri.getScheme())    // if scheme matches default
+          && defaultUri.getAuthority() != null) {  // & default has authority
+        return get(defaultUri, conf);              // return default
+      }
+    }
+
+    String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
+    if (conf.getBoolean(disableCacheName, false)) {
+      return createFileSystem(uri, conf);
+    }
+
+    return CACHE.get(uri, conf);
+  }
+```
+各个newInstance() 方法分别对应一个get() 方法，完成的功能也是一样。
 
 ####5.2.4 文件系统的关闭
+有两个方法来关闭文件系统。closeAll()用来关闭所有的文件系统。
+而close() 只是关闭当前调用该方法的文件系统，代码如下:
 
+```java
+  /**
+   * Close all cached filesystems. Be sure those filesystems are not
+   * used anymore.
+   *
+   * @throws IOException
+   */
+  public static void closeAll() throws IOException {
+    CACHE.closeAll();
+  }
+
+  /**
+   * No more filesystem operations are needed.  Will
+   * release any held locks.
+   */
+  @Override
+  public void close() throws IOException {
+    // delete all files that were marked as delete-on-exit.
+    processDeleteOnExit();
+    CACHE.remove(this.key, this);
+  }
+```
 ####5.2.5 读取数据
+数据的读取就像Java 中的io 一样，首先要获得一个输入流。输入流是通过open()方法获得的。
+抽象方法open()将由各个不同的文件系统重写，如下:
+
+```java
+  /**
+   * Opens an FSDataInputStream at the indicated Path.
+   * @param f the file name to open
+   * @param bufferSize the size of the buffer to be used.
+   */
+  public abstract FSDataInputStream open(Path f, int bufferSize)
+    throws IOException;
+
+  public FSDataInputStream open(Path f) throws IOException {
+    return open(f, getConf().getInt("io.file.buffer.size", 4096));
+  }
+
+```
+
+RawLocalFileSystem 的open 实现：
+
+```java
+  @Override
+  public FSDataInputStream open(Path f, int bufferSize) throws IOException {
+    if (!exists(f)) {
+      throw new FileNotFoundException(f.toString());
+    }
+    return new FSDataInputStream(new BufferedFSInputStream(
+        new LocalFSFileInputStream(f), bufferSize));
+  }
+```
+
+其他文件系统的实现类似。
 
 ####5.2.6 写入数据
+向文件系统中写入数据，或新建一个文件，需要获得一个用来写的输出流，
+这可以通过以下的多个create()方法来实现。
+这些重载的方法允许我们指定是否强制覆盖已有的文件、
+文件副本数量、写入文件时的缓冲大小、文件块大小以及文件许可等等。
+
+```java
+  public FSDataOutputStream create(Path f) throws IOException {
+    return create(f, true);
+  }
+
+  /**
+   * Create an FSDataOutputStream at the indicated Path.
+   * @param f the file to create
+   * @param overwrite if a file with this name already exists, then if true,
+   *   the file will be overwritten, and if false an exception will be thrown.
+   */
+  public FSDataOutputStream create(Path f, boolean overwrite)
+      throws IOException {
+    return create(f, overwrite, 
+                  getConf().getInt("io.file.buffer.size", 4096),
+                  getDefaultReplication(f),
+                  getDefaultBlockSize(f));
+  }
+
+  /**
+   * Create an FSDataOutputStream at the indicated Path with write-progress
+   * reporting.
+   * Files are overwritten by default.
+   * @param f the file to create
+   * @param progress to report progress
+   */
+  public FSDataOutputStream create(Path f, Progressable progress) 
+      throws IOException {
+    return create(f, true, 
+                  getConf().getInt("io.file.buffer.size", 4096),
+                  getDefaultReplication(f),
+                  getDefaultBlockSize(f), progress);
+  }
+
+  /**
+   * Create an FSDataOutputStream at the indicated Path.
+   * Files are overwritten by default.
+   * @param f the file to create
+   * @param replication the replication factor
+   */
+  public FSDataOutputStream create(Path f, short replication)
+      throws IOException {
+    return create(f, true, 
+                  getConf().getInt("io.file.buffer.size", 4096),
+                  replication,
+                  getDefaultBlockSize(f));
+  }
+
+  /**
+   * Create an FSDataOutputStream at the indicated Path with write-progress
+   * reporting.
+   * Files are overwritten by default.
+   * @param f the file to create
+   * @param replication the replication factor
+   * @param progress to report progress
+   */
+  public FSDataOutputStream create(Path f, short replication, 
+      Progressable progress) throws IOException {
+    return create(f, true, 
+                  getConf().getInt(
+                      CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY,
+                      CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT),
+                  replication,
+                  getDefaultBlockSize(f), progress);
+  }
+
+    
+  /**
+   * Create an FSDataOutputStream at the indicated Path.
+   * @param f the file name to create
+   * @param overwrite if a file with this name already exists, then if true,
+   *   the file will be overwritten, and if false an error will be thrown.
+   * @param bufferSize the size of the buffer to be used.
+   */
+  public FSDataOutputStream create(Path f, 
+                                   boolean overwrite,
+                                   int bufferSize
+                                   ) throws IOException {
+    return create(f, overwrite, bufferSize, 
+                  getDefaultReplication(f),
+                  getDefaultBlockSize(f));
+  }
+    
+  /**
+   * Create an FSDataOutputStream at the indicated Path with write-progress
+   * reporting.
+   * @param f the path of the file to open
+   * @param overwrite if a file with this name already exists, then if true,
+   *   the file will be overwritten, and if false an error will be thrown.
+   * @param bufferSize the size of the buffer to be used.
+   */
+  public FSDataOutputStream create(Path f, 
+                                   boolean overwrite,
+                                   int bufferSize,
+                                   Progressable progress
+                                   ) throws IOException {
+    return create(f, overwrite, bufferSize, 
+                  getDefaultReplication(f),
+                  getDefaultBlockSize(f), progress);
+  }
+    
+    
+  /**
+   * Create an FSDataOutputStream at the indicated Path.
+   * @param f the file name to open
+   * @param overwrite if a file with this name already exists, then if true,
+   *   the file will be overwritten, and if false an error will be thrown.
+   * @param bufferSize the size of the buffer to be used.
+   * @param replication required block replication for the file. 
+   */
+  public FSDataOutputStream create(Path f, 
+                                   boolean overwrite,
+                                   int bufferSize,
+                                   short replication,
+                                   long blockSize
+                                   ) throws IOException {
+    return create(f, overwrite, bufferSize, replication, blockSize, null);
+  }
+
+  /**
+   * Create an FSDataOutputStream at the indicated Path with write-progress
+   * reporting.
+   * @param f the file name to open
+   * @param overwrite if a file with this name already exists, then if true,
+   *   the file will be overwritten, and if false an error will be thrown.
+   * @param bufferSize the size of the buffer to be used.
+   * @param replication required block replication for the file. 
+   */
+  public FSDataOutputStream create(Path f,
+                                            boolean overwrite,
+                                            int bufferSize,
+                                            short replication,
+                                            long blockSize,
+                                            Progressable progress
+                                            ) throws IOException {
+    return this.create(f, FsPermission.getFileDefault().applyUMask(
+        FsPermission.getUMask(getConf())), overwrite, bufferSize,
+        replication, blockSize, progress);
+  }
+
+  /**
+   * Create an FSDataOutputStream at the indicated Path with write-progress
+   * reporting.
+   * @param f the file name to open
+   * @param permission
+   * @param flags {@link CreateFlag}s to use for this stream.
+   * @param bufferSize the size of the buffer to be used.
+   * @param replication required block replication for the file.
+   * @param blockSize
+   * @param progress
+   * @throws IOException
+   * @see #setPermission(Path, FsPermission)
+   */
+  public FSDataOutputStream create(Path f,
+      FsPermission permission,
+      EnumSet<CreateFlag> flags,
+      int bufferSize,
+      short replication,
+      long blockSize,
+      Progressable progress) throws IOException {
+    return create(f, permission, flags, bufferSize, replication,
+        blockSize, progress, null);
+  }
+  
+  /**
+   * Create an FSDataOutputStream at the indicated Path with a custom
+   * checksum option
+   * @param f the file name to open
+   * @param permission
+   * @param flags {@link CreateFlag}s to use for this stream.
+   * @param bufferSize the size of the buffer to be used.
+   * @param replication required block replication for the file.
+   * @param blockSize
+   * @param progress
+   * @param checksumOpt checksum parameter. If null, the values
+   *        found in conf will be used.
+   * @throws IOException
+   * @see #setPermission(Path, FsPermission)
+   */
+  public FSDataOutputStream create(Path f,
+      FsPermission permission,
+      EnumSet<CreateFlag> flags,
+      int bufferSize,
+      short replication,
+      long blockSize,
+      Progressable progress,
+      ChecksumOpt checksumOpt) throws IOException {
+    // Checksum options are ignored by default. The file systems that
+    // implement checksum need to override this method. The full
+    // support is currently only available in DFS.
+    return create(f, permission, flags.contains(CreateFlag.OVERWRITE), 
+        bufferSize, replication, blockSize, progress);
+  }
+```
+
+由此可见，各个create 方法最终都是调用了抽象方法create。
+
+```java
+  /**
+   * Create an FSDataOutputStream at the indicated Path with write-progress
+   * reporting.
+   * @param f the file name to open
+   * @param permission
+   * @param overwrite if a file with this name already exists, then if true,
+   *   the file will be overwritten, and if false an error will be thrown.
+   * @param bufferSize the size of the buffer to be used.
+   * @param replication required block replication for the file.
+   * @param blockSize
+   * @param progress
+   * @throws IOException
+   * @see #setPermission(Path, FsPermission)
+   */
+  public abstract FSDataOutputStream create(Path f,
+      FsPermission permission,
+      boolean overwrite,
+      int bufferSize,
+      short replication,
+      long blockSize,
+      Progressable progress) throws IOException;
+```
+
+还有一个用于传递回调接口的重载方法Progressable，如此一来，我们所写的应用就会被告知
+数据写入数据节点的进度，Progressable接口的代码片段如下：
+
+```java
+/**
+ * A facility for reporting progress.
+ * 
+ * <p>Clients and/or applications can use the provided <code>Progressable</code>
+ * to explicitly report progress to the Hadoop framework. This is especially
+ * important for operations which take significant amount of time since,
+ * in-lieu of the reported progress, the framework has to assume that an error
+ * has occured and time-out the operation.</p>
+ */
+@InterfaceAudience.Public
+@InterfaceStability.Stable
+public interface Progressable {
+  /**
+   * Report progress to the Hadoop framework.
+   */
+  public void progress();
+}
+```
+
+新建文件的另一种方法是使用append() 在一个已有文件中追加( 也有一些其他重载版本) 。
+重要的是抽象方法append() 。同抽象方法create 一样，各个派生类需要重写. 代码如下:
+
+```java
+  /**
+   * Append to an existing file (optional operation).
+   * Same as append(f, getConf().getInt("io.file.buffer.size", 4096), null)
+   * @param f the existing file to be appended.
+   * @throws IOException
+   */
+  public FSDataOutputStream append(Path f) throws IOException {
+    return append(f, getConf().getInt("io.file.buffer.size", 4096), null);
+  }
+  /**
+   * Append to an existing file (optional operation).
+   * Same as append(f, bufferSize, null).
+   * @param f the existing file to be appended.
+   * @param bufferSize the size of the buffer to be used.
+   * @throws IOException
+   */
+  public FSDataOutputStream append(Path f, int bufferSize) throws IOException {
+    return append(f, bufferSize, null);
+  }
+
+  /**
+   * Append to an existing file (optional operation).
+   * @param f the existing file to be appended.
+   * @param bufferSize the size of the buffer to be used.
+   * @param progress for reporting progress if it is not null.
+   * @throws IOException
+   */
+  public abstract FSDataOutputStream append(Path f, int bufferSize,
+      Progressable progress) throws IOException;
+
+```
+
+同open 一样，不同的文件系统的实现会重新改函数的实现。
 
 ####5.2.7 文件操作
 
+#####5.2.7.1 重命名
+文件重命名使用抽象方法rename() 实现，其代码如下所示。
+0.21 版本以前使用非抽象方法rename() 方法实现。
+但现在该方法已经不再推荐使用。
+
+```java
+  public abstract boolean rename(Path src, Path dst) throws IOException;
+
+  /**
+   * Renames Path src to Path dst
+   * <ul>
+   * <li
+   * <li>Fails if src is a file and dst is a directory.
+   * <li>Fails if src is a directory and dst is a file.
+   * <li>Fails if the parent of dst does not exist or is a file.
+   * </ul>
+   * <p>
+   * If OVERWRITE option is not passed as an argument, rename fails
+   * if the dst already exists.
+   * <p>
+   * If OVERWRITE option is passed as an argument, rename overwrites
+   * the dst if it is a file or an empty directory. Rename fails if dst is
+   * a non-empty directory.
+   * <p>
+   * Note that atomicity of rename is dependent on the file system
+   * implementation. Please refer to the file system documentation for
+   * details. This default implementation is non atomic.
+   * <p>
+   * This method is deprecated since it is a temporary method added to 
+   * support the transition from FileSystem to FileContext for user 
+   * applications.
+   * 
+   * @param src path to be renamed
+   * @param dst new path after rename
+   * @throws IOException on failure
+   */
+  @Deprecated
+  protected void rename(final Path src, final Path dst,
+      final Rename... options) throws IOException {
+    // Default implementation
+    final FileStatus srcStatus = getFileLinkStatus(src);
+    if (srcStatus == null) {
+      throw new FileNotFoundException("rename source " + src + " not found.");
+    }
+
+    boolean overwrite = false;
+    if (null != options) {
+      for (Rename option : options) {
+        if (option == Rename.OVERWRITE) {
+          overwrite = true;
+        }
+      }
+    }
+
+    FileStatus dstStatus;
+    try {
+      dstStatus = getFileLinkStatus(dst);
+    } catch (IOException e) {
+      dstStatus = null;
+    }
+    if (dstStatus != null) {
+      if (srcStatus.isDirectory() != dstStatus.isDirectory()) {
+        throw new IOException("Source " + src + " Destination " + dst
+            + " both should be either file or directory");
+      }
+      if (!overwrite) {
+        throw new FileAlreadyExistsException("rename destination " + dst
+            + " already exists.");
+      }
+      // Delete the destination that is a file or an empty directory
+      if (dstStatus.isDirectory()) {
+        FileStatus[] list = listStatus(dst);
+        if (list != null && list.length != 0) {
+          throw new IOException(
+              "rename cannot overwrite non empty destination directory " + dst);
+        }
+      }
+      delete(dst, false);
+    } else {
+      final Path parent = dst.getParent();
+      final FileStatus parentStatus = getFileStatus(parent);
+      if (parentStatus == null) {
+        throw new FileNotFoundException("rename destination parent " + parent
+            + " not found.");
+      }
+      if (!parentStatus.isDirectory()) {
+        throw new ParentNotDirectoryException("rename destination parent " + parent
+            + " is a file.");
+      }
+    }
+    if (!rename(src, dst)) {
+      throw new IOException("rename from " + src + " to " + dst + " failed.");
+    }
+  }
+```
+
+#####5.2.7.2 文件删除
+件删除使用抽象方法delete()实现，其代码如下所示，
+0.21 版本以前使用非抽象方法delete()方法实现。
+但现在该方法已经不再推荐使用。
+
+```java
+  /**
+   * Delete a file 
+   * @deprecated Use {@link #delete(Path, boolean)} instead.
+   */
+  @Deprecated
+  public boolean delete(Path f) throws IOException {
+    return delete(f, true);
+  }
+  
+  /** Delete a file.
+   *
+   * @param f the path to delete.
+   * @param recursive if path is a directory and set to 
+   * true, the directory is deleted else throws an exception. In
+   * case of a file the recursive can be set to either true or false. 
+   * @return  true if delete is successful else false. 
+   * @throws IOException
+   */
+  public abstract boolean delete(Path f, boolean recursive) throws IOException;
+
+```
+
+#####5.2.7.3 文件或路径测试
+
+```java
+  /** Check if exists.
+   * @param f source file
+   */
+  public boolean exists(Path f) throws IOException {
+    try {
+      return getFileStatus(f) != null;
+    } catch (FileNotFoundException e) {
+      return false;
+    }
+  }
+
+  /** True iff the named path is a directory.
+   * Note: Avoid using this method. Instead reuse the FileStatus 
+   * returned by getFileStatus() or listStatus() methods.
+   * @param f path to check
+   */
+  public boolean isDirectory(Path f) throws IOException {
+    try {
+      return getFileStatus(f).isDirectory();
+    } catch (FileNotFoundException e) {
+      return false;               // f does not exist
+    }
+  }
+
+  /** True iff the named path is a regular file.
+   * Note: Avoid using this method. Instead reuse the FileStatus 
+   * returned by getFileStatus() or listStatus() methods.
+   * @param f path to check
+   */
+  public boolean isFile(Path f) throws IOException {
+    try {
+      return getFileStatus(f).isFile();
+    } catch (FileNotFoundException e) {
+      return false;               // f does not exist
+    }
+  }
+```
+
+#####5.2.7.4 文件复制
+copyFromLocalFile 来实现将文件从本地复制到其它路径 ，FileSystm 中有多个重载的copyFromLocalFile
+
+```java
+  /**
+   * The src file is on the local disk.  Add it to FS at
+   * the given dst name and the source is kept intact afterwards
+   * @param src path
+   * @param dst path
+   */
+  public void copyFromLocalFile(Path src, Path dst)
+    throws IOException {
+    copyFromLocalFile(false, src, dst);
+  }
+
+
+  /**
+   * The src file is on the local disk.  Add it to FS at
+   * the given dst name.
+   * delSrc indicates if the source should be removed
+   * @param delSrc whether to delete the src
+   * @param src path
+   * @param dst path
+   */
+  public void copyFromLocalFile(boolean delSrc, Path src, Path dst)
+    throws IOException {
+    copyFromLocalFile(delSrc, true, src, dst);
+  }
+  
+  /**
+   * The src files are on the local disk.  Add it to FS at
+   * the given dst name.
+   * delSrc indicates if the source should be removed
+   * @param delSrc whether to delete the src
+   * @param overwrite whether to overwrite an existing file
+   * @param srcs array of paths which are source
+   * @param dst path
+   */
+  public void copyFromLocalFile(boolean delSrc, boolean overwrite, 
+                                Path[] srcs, Path dst)
+    throws IOException {
+    Configuration conf = getConf();
+    FileUtil.copy(getLocal(conf), srcs, this, dst, delSrc, overwrite, conf);
+  }
+  
+  /**
+   * The src file is on the local disk.  Add it to FS at
+   * the given dst name.
+   * delSrc indicates if the source should be removed
+   * @param delSrc whether to delete the src
+   * @param overwrite whether to overwrite an existing file
+   * @param src path
+   * @param dst path
+   */
+  public void copyFromLocalFile(boolean delSrc, boolean overwrite, 
+                                Path src, Path dst)
+    throws IOException {
+    Configuration conf = getConf();
+    FileUtil.copy(getLocal(conf), src, this, dst, delSrc, overwrite, conf);
+  }
+
+
+```
+
+copyToLocalFile负责将FS下的文件复制到本地
+
+```java
+  /**
+   * The src file is under FS, and the dst is on the local disk.
+   * Copy it from FS control to the local dst name.
+   * @param src path
+   * @param dst path
+   */
+  public void copyToLocalFile(Path src, Path dst) throws IOException {
+    copyToLocalFile(false, src, dst);
+  }
+
+  /**
+   * The src file is under FS, and the dst is on the local disk.
+   * Copy it from FS control to the local dst name.
+   * delSrc indicates if the src will be removed or not.
+   * @param delSrc whether to delete the src
+   * @param src path
+   * @param dst path
+   */   
+  public void copyToLocalFile(boolean delSrc, Path src, Path dst)
+    throws IOException {
+    copyToLocalFile(delSrc, src, dst, false);
+  }
+  
+    /**
+   * The src file is under FS, and the dst is on the local disk. Copy it from FS
+   * control to the local dst name. delSrc indicates if the src will be removed
+   * or not. useRawLocalFileSystem indicates whether to use RawLocalFileSystem
+   * as local file system or not. RawLocalFileSystem is non crc file system.So,
+   * It will not create any crc files at local.
+   * 
+   * @param delSrc
+   *          whether to delete the src
+   * @param src
+   *          path
+   * @param dst
+   *          path
+   * @param useRawLocalFileSystem
+   *          whether to use RawLocalFileSystem as local file system or not.
+   * 
+   * @throws IOException
+   *           - if any IO error
+   */
+  public void copyToLocalFile(boolean delSrc, Path src, Path dst,
+      boolean useRawLocalFileSystem) throws IOException {
+    Configuration conf = getConf();
+    FileSystem local = null;
+    if (useRawLocalFileSystem) {
+      local = getLocal(conf).getRawFileSystem();
+    } else {
+      local = getLocal(conf);
+    }
+    FileUtil.copy(this, src, local, dst, delSrc, conf);
+  }
+```
+
+
+moveFromLocalFile负责将本地文件移动到FS的其它位置
+
+```java
+  /**
+   * The src files is on the local disk.  Add it to FS at
+   * the given dst name, removing the source afterwards.
+   * @param srcs path
+   * @param dst path
+   */
+  public void moveFromLocalFile(Path[] srcs, Path dst)
+    throws IOException {
+    copyFromLocalFile(true, true, srcs, dst);
+  }
+
+  /**
+   * The src file is on the local disk.  Add it to FS at
+   * the given dst name, removing the source afterwards.
+   * @param src path
+   * @param dst path
+   */
+  public void moveFromLocalFile(Path src, Path dst)
+    throws IOException {
+    copyFromLocalFile(true, src, dst);
+  }
+```
+moveToLocalFile将FS下的文件移动到本地
+
+```java
+  /**
+   * The src file is under FS, and the dst is on the local disk.
+   * Copy it from FS control to the local dst name.
+   * Remove the source afterwards
+   * @param src path
+   * @param dst path
+   */
+  public void moveToLocalFile(Path src, Path dst) throws IOException {
+    copyToLocalFile(true, src, dst);
+  }
+```
+
+moveFromLocalFile, moveToLocalFile分别在内部调用copyFromLocalFile, copyToLocalFile方法
+
 ####5.2.8 查询文件系统
 
+
 ####5.2.9 其它方法
+1. 默认的文件系统uri通过public static URI getDefau ltUri(Configuration conf) 来获取；
+   通过  public static void setDefaultUri(Configuration conf, URI uri) 和public static void setDefaultUri(Configuration conf, String uri)来设置。
+2. 当一个文件系统实例被创建后，就需要调用initialize 来初始化。其默认实现仅仅是设置了statistics 属性。
+3. public abstract URI getUri()  用来获取该文件系统对应的Uri。
+4. public static LocalFileSystem getLocal(Configuration conf)  获得本地文件系统。
+   在0.21 版本中出现了一个新的方法newInstanceLocal() ，该方法与getLocal 完成完全一样的功能。
+5. public BlockLocation[] getFileBlockLocations(Path p,  long start, long len) throws IOException
+6. public BlockLocation[] getFileBlockLocations(FileStatus file,  long start, long len) throws  IOException
+   返回file 中从start 开始len 长度的数据所在的块
+7. public FsServerDefaults getSer verDefaults() throws IOException 得到服务器的默认配置。
+8. public boolean setReplication(Path src, short replication)
+9. public Path getHomeDirectory() 等等。
 
 ###5.3 FilterFileSystem
 
