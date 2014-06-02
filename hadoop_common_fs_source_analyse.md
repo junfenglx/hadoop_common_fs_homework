@@ -1401,12 +1401,24 @@ LocalFileSystem 有一个属性rfs，用来表原生的文件系统。LocalFileS
 6 输入输出流分析
 ---------------
 
-* 6.1 FSInputStream 抽象类
-* 6.2 输出流
-* 6.3 FSInputChecker
-* 6.4 FSOutputSummer
-* 6.5 FSDataInputStream
-* 6.6 FSDataOutputStream
+* [6.1 FSInputStream抽象类](#61-fsinputstream抽象类)
+* [6.2 输出流](#62-输出流)
+* [6.3 FSInputChecker](#63-fsinputchecker)
+* [6.4 FSOutputSummer](#64-fsoutputsummer)
+* [6.5 FSDataInputStream](#65-fsdatainputstream)
+* [6.6 FSDataOutputStream](#66-fsdataoutputstream)
+
+###6.1 FSInputStream抽象类
+
+###6.2 输出流
+
+###6.3 FSInputChecker
+
+###6.4 FSOutputSummer
+
+###6.5 FSDataInputStream
+
+###6.6 FSDataOutputStream
 
 
 7 AbstractFileSystem分析
