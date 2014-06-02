@@ -945,7 +945,7 @@ public interface Progressable {
 ```
 
 #####5.2.7.2 文件删除
-删除使用抽象方法delete()实现，其代码如下所示，
+件删除使用抽象方法delete()实现，其代码如下所示，
 0.21 版本以前使用非抽象方法delete()方法实现。
 但现在该方法已经不再推荐使用。
 
@@ -1180,67 +1180,7 @@ moveFromLocalFile, moveToLocalFile分别在内部调用copyFromLocalFile, copyTo
 
 ####5.2.8 查询文件系统
 
-#####5.2.8.1 文件元数据：FileStatus
-任何文件系统的一个重要特征是定位其目录结构及检索其存储的文件和目录信息的能力。
-FileStatus是一个简单的类，封装了文件系统中文件和目录的元数据，包括文件长度、块大小、副
-本、修改时间、所有者以及许可信息。FileStatus实现了Writeable 接口，可以序列化。
 
-类图见图5-5:
-![img][5-5.jpg]
-
-FileSystem 的getFileStatus() 提供了获取一个文件或目录的状态对象的方法。
-
-#####5.2.8.2 列出文件
-查找一个文件或目录的信息很实用，但有时我们还需要能够列出目录的内容。这就是listStatus()方法的功能：
-
-1. public abstract FileStatus[] listStatus(Path f) throws IOException
-2. public FileStatus[] listStatus(Path f, PathFilter filter) throws IOException
-3. public FileStatus[] listStatus(Path[] files) throws IOException
-4. public FileStatus[] listStatus(Path[] files, PathFilter filter) throws IOException
-
-传入参数是一个文件时，它会简单地返回长度为1 的FileStatus对象的一个数组。当传入参数是一个目录时，它会返回0 或者多个FileStatus对象，代表着此目录所包含的文件和目录。 
-重载方法允许我们使用PathFilter 来限制匹配的文件和目录。
-
-如果把路径数组作为参数来调用listStatus 方法，其结果是与依次对每个路径调用此方法，
-再将 FileStatus对象数组收集在一个单一数组中的结果是相同的，但是前者更为方便。
-这在建立从文件系统树的不同部分执行的输入文件的列表时很有用.
-
-#####5.2.8.3 文件格式
-在一步操作中处理批量文件，这个要求很常见。
-举例来说，处理日志的MapReduce 作业可能会分析一个月的文件，这些文件被包含在大量目录中。
-Hadoop有一个通配的操作，可以方便地使用通配符在一个表达式中核对多个文件，不需要列举每个文件和目录来指定输入。
-Hadoop为执行通配提供了两个FileSystem 方法：
-
-1. public FileStatus[] globStatus(Path pathPattern) throws IOException
-2. public FileStatus[] globStatus(Path pathPattern,PathFilter filter) throws IOException
-   globStatus() 返回了其路径匹配于所供格式的FileStatus对象数组，按路径排序。可选的PathFilter命令可以进一步指定限制匹配。
-
-正则语法见图5-6:
-
-![img][5-6.png]
-
-**PathFilter 对象**
-
-通配格式不是总能够精确地描述我们想要访问的文件集合。
-比如，使用通配格式排除一个特定的文件就不太可能。
-FileSystem 中的listStatus() 和globStatus() 方法提供了可选的PathFilter 对象，
-使我们能够通过编程方式控制匹配：
-
-PathFilter 代码如下:
-
-```java
-public interface PathFilter {
-  /**
-   * Tests whether or not the specified abstract pathname should be
-   * included in a pathname list.
-   *
-   * @param  path  The abstract pathname to be tested
-   * @return  <code>true</code> if and only if <code>pathname</code>
-   *          should be included
-   */
-  boolean accept(Path path);
-}
-```
 ####5.2.9 其它方法
 1. 默认的文件系统uri通过public static URI getDefau ltUri(Configuration conf) 来获取；
    通过  public static void setDefaultUri(Configuration conf, URI uri) 和public static void setDefaultUri(Configuration conf, String uri)来设置。
@@ -1256,166 +1196,38 @@ public interface PathFilter {
 9. public Path getHomeDirectory() 等等。
 
 ###5.3 FilterFileSystem
-FilterFileSystem 的类图如图5-7：
-
-![img][5-7.jpg]
-
-FilterFileSystem 类包含了一个其它的文件系统的实例fs ，并将其作为基本的文件系统。
-FilterFileSystem 类几乎将所有重写的方法交给了其内部保存的fs 来处理。
-但在交给fs 处理之前，自己可以做一些处理，以此来实现过滤。
-
-举例代码如下:
-
-```java
-  /** Called after a new FileSystem instance is constructed.
-   * @param name a uri whose authority section names the host, port, etc.
-   *   for this FileSystem
-   * @param conf the configuration
-   */
-  @Override
-  public void initialize(URI name, Configuration conf) throws IOException {
-    super.initialize(name, conf);
-    // this is less than ideal, but existing filesystems sometimes neglect
-    // to initialize the embedded filesystem
-    if (fs.getConf() == null) {
-      fs.initialize(name, conf);
-    }
-    String scheme = name.getScheme();
-    if (!scheme.equals(fs.getUri().getScheme())) {
-      swapScheme = scheme;
-    }
-  }
-
-  /** Returns a URI whose scheme and authority identify this FileSystem.*/
-  @Override
-  public URI getUri() {
-    return fs.getUri();
-  }
-```
-
-其余方法类似
-
-其实FilterFileSystem实现的是*装饰器模式*
 
 ###5.4 ChecksumFileSystem
-ChecksumFileSystem 类为文件系统提供了校验和的功能, 类图见图5-8
-
-![img][5-8.jpg]
-
-HDFS 以透明方式校验所有写入它的数据，并在默认设置下，会在读取数据时验证校验和。
-
-针对数据的每个io.bytes.per.checksum 字节，都会创建一个单独的校验和。默认值为512 字节，使用CRC-32校验和，存储开销为1%。
-
-每一个原始文件都有一个校验和文件，比如文件 /a/b/c.txt  对应的校验和文件为/a/b/.c.txt.crc 。
-校验和文件默认是隐藏的文件，即在文件名“c.txt” 前加上一个“. ”，并在文件名“c.txt”后面加上后缀“.crc ”。
-
-ChecksumFileSystem 类中的属性CHECKSUM_VERSION 为写入校验和文件的文件头中的版本号。verifyChecksum 表示是否需要检测校验和。
-
-ChecksumFileSystem 中有两个内部类ChecksumFSInputChecker 和ChecksumFSOutputSummer。详见后面分析。
-
-ChecksumFileSystem 类open 和create 方法的实现如下，仅是简单的创建一个FSDataInputStream和FSDataOutputStream 。
-
-```java
-  /**
-   * Opens an FSDataInputStream at the indicated Path.
-   * @param f the file name to open
-   * @param bufferSize the size of the buffer to be used.
-   */
-  @Override
-  public FSDataInputStream open(Path f, int bufferSize) throws IOException {
-    FileSystem fs;
-    InputStream in;
-    if (verifyChecksum) {
-      fs = this;
-      in = new ChecksumFSInputChecker(this, f, bufferSize);
-    } else {
-      fs = getRawFileSystem();
-      in = fs.open(f, bufferSize);
-    }
-    return new FSDataBoundedInputStream(fs, f, in);
-  }
-
-  @Override
-  public FSDataOutputStream create(Path f, FsPermission permission,
-      boolean overwrite, int bufferSize, short replication, long blockSize,
-      Progressable progress) throws IOException {
-    return create(f, permission, overwrite, true, bufferSize,
-        replication, blockSize, progress);
-  }
-
-  private FSDataOutputStream create(Path f, FsPermission permission,
-      boolean overwrite, boolean createParent, int bufferSize,
-      short replication, long blockSize,
-      Progressable progress) throws IOException {
-    Path parent = f.getParent();
-    if (parent != null) {
-      if (!createParent && !exists(parent)) {
-        throw new FileNotFoundException("Parent directory doesn't exist: "
-            + parent);
-      } else if (!mkdirs(parent)) {
-        throw new IOException("Mkdirs failed to create " + parent);
-      }
-    }
-    final FSDataOutputStream out;
-    if (writeChecksum) {
-      out = new FSDataOutputStream(
-          new ChecksumFSOutputSummer(this, f, overwrite, bufferSize, replication,
-              blockSize, progress), null);
-    } else {
-      out = fs.create(f, permission, overwrite, bufferSize, replication,
-          blockSize, progress);
-      // remove the checksum file since we aren't writing one
-      Path checkFile = getChecksumFile(f);
-      if (fs.exists(checkFile)) {
-        fs.delete(checkFile, true);
-      }
-    }
-    if (permission != null) {
-      setPermission(f, permission);
-    }
-    return out;
-  }
-```
 
 ###5.5 LocalFileSystem
-类图如图5-9
 
-![img][5-9.jpg]
 
-LocalFileSystem 从ChecksumFileSystem 类派生，主要实现其它一些支持校验和文件系统的API。
 
-LocalFileSystem 有一个属性rfs，用来表原生的文件系统。LocalFileSystem 重写了一些方法，
-如copyFromLocalFile 和copyToLocalFile 等。
-
+  [3-1.jpg]: ./images/3-1.jpg
+  [4-1.png]: ./images/4-1.png
+  [4-2.png]: ./images/4-2.png
+  [S3]: http://aws.amazon.com/s3
+  [4-3.png]: ./images/4-3.png
+  [4-4.png]: ./images/4-4.png
+  [5-1.jpg]: ./images/5-1.jpg
+  [5-2.png]: ./images/5-2.png
+  [5-3.png]: ./images/5-3.png
+  [5-4.png]: ./images/5-4.png
 
 7 AbstractFileSystem 分析
 -------------------------
-在分析该类层次结构时，可以将AbstractFileSystem 与FileSystem 对应，FilterFs 与FilerFileSystem 对应，
-ChecksumFs与ChecksumFileSystem 对应，LocalFs与LocalFileSystem 对应，RawLocalFs与RawLocalFileSystem 对应。
-他们完成的功能及其相似。
+在分析该类层次结构时，可以将AbstractFileSystem 与FileSystem 对应，FilterFs 与
+FilerFileSystem 对应，ChecksumFs与ChecksumFileSystem 对应，LocalFs与LocalFileSystem 对应，RawLocalFs与RawLocalFileSystem 对应。他们完成的功能及其相似。
 
 ###7.1  AbstractFileSystem 抽象类
-AbstractFileSystem 是0.21 版本新出现的API，应该是用来替代FileSystem 的。
-该类为 Hadoop文件系统的实现提供了一个接口。AbstractFileSystem 是一个抽象类。
-它与FileSystem 有很多同名的方法。这些同名的方法完成相同的功能。
-比如 get，create 等等。其它的方法大都是抽象方法。
-
-图7-1:
+AbstractFileSystem 是0.21 版本新出现的API，应该是用来替代FileSystem 的。该类为 Hadoop文件系统的实现提供了一个接口。AbstractFileSystem 是一个抽象类。  它与FileSystem 有很多同名的方法。这些同名的方法完成相同的功能。比如 get，create 等等。其它的方法大都是抽象方法。
 ![img](./images/7-1.jpg)
-
-get 方法调用了createFileSystm 方法实现。
-而createFileSystm 方法实现与FileSystm的createFileSystm 可以说是完全一样。
+get 方法调用了createFileSystm 方法实现。而createFileSystm 方法实现与FileSystm的createFileSystm 可以说是完全一样。 
 create 方法首先解析参数，然后调用createInternal 抽象方法。
 
 ###7.2  FilterFs抽象类
-图7-2:
-
 ![img](./images/7-2.png)
-
-FilterFs也是一个抽象类，它同FilterFileSystem 完全一样，只是拥有一个AbstractFileSystem类型的属性myFs。
-FilterFs将其作为基本的文件系统。FilterFs类几乎将所有重写的方法交给了其内部保存的myFs来处理。
-但在交给 myFs处理之前，自己可以做一些处理，以此来实现过滤。如：
-
+FilterFs也是一个抽象类，它同FilterFileSystem 完全一样，只是拥有一个AbstractFileSystem类型的属性myFs。FilterFs将其作为基本的文件系统。FilterFs类几乎将所有重写的方法交给了其内部保存的myFs来处理。但在交给 myFs处理之前，自己可以做一些处理，以此来实现过滤。如：
 ```java
 public FSDataOutputStream createInternal(Path f,
     EnumSet<CreateFlag> flag, FsPermission absolutePermission, int bufferSize,
@@ -1429,201 +1241,7 @@ public FSDataOutputStream createInternal(Path f,
 ```
 
 ###7.3  ChecksumFs抽象类
-ChecksumFs抽象类的实现与ChecksumFileSystem 的实现完全一样。
-只是ChecksumFs使用的是ChecksumFs.ChecksumFSInputStream ，
-而ChecksumFileSystem使用的是ChecksumFileSystem.ChecksumFSInputStream。
-
-图7-3:
-
+ChecksumFs抽象类的实现与ChecksumFileSystem 的实现完全一样。只是ChecksumFs使用的是ChecksumFs.ChecksumFSInputStream ，而ChecksumFileSystem使用的是ChecksumFileSystem.ChecksumFSInputStream。
 ![img](./images/7-3.png)
 
 ###7.4  LocalFs类
-LocalFs仅仅有两个构造函数。如图7-4:
-
-![img][7-4.png]
-
-DelegateToFileSystem抽象类:
-
-![img][7-5.png]
-
-###7.5 DelegateToFileSystem
-顾名思义，DelegateToFileSystem 是一个代理类。
-它简单的将所有的操作交给 FileSystm类型的属性fsImpl 来处理。
-
-目前Hadoop源码中只有FtpFs和RawLocalFs是从其派生的。
-
-###7.6 FileContext类
-FileContext 类是0.21 版中提供的新的API，它为应用程序编写者提供了访问Hadoop文件系统的接口，例如create open list等方法。
-
-类图如图7-6:
-
-![img][7-6.jpg]
-
-#####7.6.1 Hadoop中的路径
-
-* Hadoop中使用Path 来表示一个文件路径。Path 中含有文件所在的URI 。
-* Hadoop支持URI 名字空间和URI 名字。Hadoop中URI 名字非常灵活，使用者可以在不知道
-* 服务器地址或名字的情况下，访问默认的文件系统。默认的文件系统通过配置文件来制定。
-
-Hadoop中路径名有三种形式：
-1. 完全限定的URI ：scheme://authority/path
-2. 以斜杠开头的路径：/path  表示相对于默认的文件系统，即相当于default-scheme:// default-authority/path
-3. 相对路径：path  相对于工作目录
-   完全限定的URI 和以斜杠开头的路径称为绝对路径。
-   但如下形式的路径则是非法的：scheme:foo/bar
-
-Hadoop 中文件和目录的路径用 Path 类表示。Path 的表示与 Unix 路径相似,使用’/’来分隔目
-录,而不是’\’。Path类图如图7-7:
-
-![img][7-7.jpg]
-
-####7.6.2 server side属性
-所有的文件系统实例(例如文件系统的部署)都有默认属性。这些属性叫做 server side (SS)
-defaults。像 create 这样的操作允许选择多种属性:要么当做参数传给它,要么使用 SS 属性。
-
-SS 属性由 FsServerDefaults 表示, 如图7-8:
-
-![img][7-8.jpg]
-
-与文件系统有关的 SS 属性有
-
-* the home directory (default is "/user/userName")
-* the initial wd (only for local fs)
-* replication factor 分片因子
-* block size
-* buffer size
-* bytesPerChecksum (if used).
-
-###7.6.3 FileContext
-FileContext 由默认文件系统、工作目录和umask 定义。
-
-获得一个FileContext 可以使用FileContext 的静态方法： getFileContext();getLocalFSFileContext()
-
-getFileContext  有多重重载的形式。但最终都是调用了如下函数：
-
-```java
-  /**
-   * Protected Static Factory methods for getting a FileContexts
-   * that take a AbstractFileSystem as input. To be used for testing.
-   */
-
-  /**
-   * Create a FileContext with specified FS as default using the specified
-   * config.
-   * 
-   * @param defFS
-   * @param aConf
-   * @return new FileContext with specifed FS as default.
-   */
-  public static FileContext getFileContext(final AbstractFileSystem defFS,
-                    final Configuration aConf) {
-    return new FileContext(defFS, FsPermission.getUMask(aConf), aConf);
-  }
-  
-  /**
-   * Create a FileContext for specified file system using the default config.
-   * 
-   * @param defaultFS
-   * @return a FileContext with the specified AbstractFileSystem
-   *                 as the default FS.
-   */
-  protected static FileContext getFileContext(
-    final AbstractFileSystem defaultFS) {
-    return getFileContext(defaultFS, new Configuration());
-  }
-
-```
-
-public void setWorkingDirectory(final  Path newWDir) throws IOException 用来设置工作目录。
-
-FileContext 中的很多方法是用来取代FileSystem 中的方法的。
-包括create，mkdir，delete，open ，setReplication ，rename ，
-setPermission ，setOwner ，setTimes ，getFileStatus，
-getFileLinkStatus，getLinkTarget ，getFileBlockLocations等方法在AbstractFileSystem 中都有对应的方法。
-这些方法的实现具有相同的形式。比如open 方法的代码如下：
-
-```java
-  /**
-   * Opens an FSDataInputStream at the indicated Path.
-   * 
-   * @param f the file name to open
-   * @param bufferSize the size of the buffer to be used.
-   * 
-   * @throws AccessControlException If access is denied
-   * @throws FileNotFoundException If file <code>f</code> does not exist
-   * @throws UnsupportedFileSystemException If file system for <code>f</code> is
-   *           not supported
-   * @throws IOException If an I/O error occurred
-   * 
-   * Exceptions applicable to file systems accessed over RPC:
-   * @throws RpcClientException If an exception occurred in the RPC client
-   * @throws RpcServerException If an exception occurred in the RPC server
-   * @throws UnexpectedServerException If server implementation throws 
-   *           undeclared exception to RPC server
-   */
-  public FSDataInputStream open(final Path f, final int bufferSize)
-      throws AccessControlException, FileNotFoundException,
-      UnsupportedFileSystemException, IOException {
-    final Path absF = fixRelativePart(f);
-    return new FSLinkResolver<FSDataInputStream>() {
-      @Override
-      public FSDataInputStream next(final AbstractFileSystem fs, final Path p) 
-        throws IOException, UnresolvedLinkException {
-        return fs.open(p, bufferSize);
-      }
-    }.resolve(this, absF);
-  }
-```
-
-内部FSLinkResolver<T>抽象模板使用来解析路径中的符号链接的。
-public abstract T next(final AbstractFileSystem fs, final Path p)为其抽象方法。
-resolve 方法如下：
-
-```java
-  /**
-   * Resolves all symbolic links in the specified path.
-   * Returns the new path object.
-   */
-  protected Path resolve(final Path f) throws FileNotFoundException,
-      UnresolvedLinkException, AccessControlException, IOException {
-    return new FSLinkResolver<Path>() {
-      @Override
-      public Path next(final AbstractFileSystem fs, final Path p) 
-        throws IOException, UnresolvedLinkException {
-        return fs.resolvePath(p);
-      }
-    }.resolve(this, f);
-  }
-```
-
-FileContext 的getFSofPath 方法用来获得支持指定路径path 的文件系统。
-该方法首先检查路径path 是不是属于默认文件系统支持的路径，
-如果是则返回 FileContext.defaultFS 属性；否则AbstractFileSystem.get来获取对应的文件系统。
-
-在获得文件系统fs 之后，resolve 会调用next 方法，并返回其结果。
-如果出现异常，则解析路径中的符号链接，再次调用next 。
-
-总的来说，FileContext.open 是通过调用AbstractFileSystem.open来实现的。
-
-  [3-1.jpg]: ./images/3-1.jpg
-  [4-1.png]: ./images/4-1.png
-  [4-2.png]: ./images/4-2.png
-  [S3]: http://aws.amazon.com/s3
-  [4-3.png]: ./images/4-3.png
-  [4-4.png]: ./images/4-4.png
-  [5-1.jpg]: ./images/5-1.jpg
-  [5-2.png]: ./images/5-2.png
-  [5-3.png]: ./images/5-3.png
-  [5-4.png]: ./images/5-4.png
-  [5-5.jpg]: ./images/5-5.jpg
-  [5-6.png]: ./images/5-6.png
-  [5-7.jpg]: ./images/5-7.jpg
-  [5-8.jpg]: ./images/5-8.jpg
-  [5-9.jpg]: ./images/5-9.jpg
-  [7-4.png]: ./images/7-4.png
-  [7-5.png]: ./images/7-5.png
-  [7-6.jpg]: ./images/7-6.jpg
-  [7-7.jpg]: ./images/7-7.jpg
-  [7-8.jpg]: ./images/7-8.jpg
-
-
