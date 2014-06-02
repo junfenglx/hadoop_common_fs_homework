@@ -1393,7 +1393,7 @@ LocalFileSystem 有一个属性rfs，用来表原生的文件系统。LocalFileS
 7 AbstractFileSystem分析
 -------------------------
 * [7.1 AbstractFileSystem抽象类](#71-abstractfilesystem抽象类)
-* [7.2 FilterFs抽象类](#72-silterfs抽象类)
+* [7.2 FilterFs抽象类](#72-filterfs抽象类)
 * [7.3 ChecksumFs抽象类](#73-checksumfs抽象类)
 * [7.4 LocalFs类](#74-localfs类)
 * [7.5 DelegateToFileSystem](#75-delegatetofilesystem)
