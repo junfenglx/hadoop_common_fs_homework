@@ -11,6 +11,8 @@
 
 [5 FileSystem深入分析](#5-filesystem深入分析)
 
+[7 AbstractFileSystem分析](#7-abstractfilesystem分析)
+
 1 修订记录
 ----------
 序号 |        时间        | 修订人       | 版本
@@ -1388,13 +1390,20 @@ LocalFileSystem 有一个属性rfs，用来表原生的文件系统。LocalFileS
 如copyFromLocalFile 和copyToLocalFile 等。
 
 
-7 AbstractFileSystem 分析
+7 AbstractFileSystem分析
 -------------------------
+* [7.1 AbstractFileSystem抽象类](#71-abstractfilesystem抽象类)
+* [7.2 FilterFs抽象类](#72-silterfs抽象类)
+* [7.3 ChecksumFs抽象类](#73-checksumfs抽象类)
+* [7.4 LocalFs类](#74-localfs类)
+* [7.5 DelegateToFileSystem](#75-delegatetofilesystem)
+* [7.6 FileContext类](#76-filecontext类)
+
 在分析该类层次结构时，可以将AbstractFileSystem 与FileSystem 对应，FilterFs 与FilerFileSystem 对应，
 ChecksumFs与ChecksumFileSystem 对应，LocalFs与LocalFileSystem 对应，RawLocalFs与RawLocalFileSystem 对应。
 他们完成的功能及其相似。
 
-###7.1  AbstractFileSystem 抽象类
+###7.1 AbstractFileSystem抽象类
 AbstractFileSystem 是0.21 版本新出现的API，应该是用来替代FileSystem 的。
 该类为 Hadoop文件系统的实现提供了一个接口。AbstractFileSystem 是一个抽象类。
 它与FileSystem 有很多同名的方法。这些同名的方法完成相同的功能。
@@ -1407,7 +1416,7 @@ get 方法调用了createFileSystm 方法实现。
 而createFileSystm 方法实现与FileSystm的createFileSystm 可以说是完全一样。
 create 方法首先解析参数，然后调用createInternal 抽象方法。
 
-###7.2  FilterFs抽象类
+###7.2 FilterFs抽象类
 图7-2:
 
 ![img](./images/7-2.png)
@@ -1428,7 +1437,7 @@ public FSDataOutputStream createInternal(Path f,
   }
 ```
 
-###7.3  ChecksumFs抽象类
+###7.3 ChecksumFs抽象类
 ChecksumFs抽象类的实现与ChecksumFileSystem 的实现完全一样。
 只是ChecksumFs使用的是ChecksumFs.ChecksumFSInputStream ，
 而ChecksumFileSystem使用的是ChecksumFileSystem.ChecksumFSInputStream。
@@ -1437,7 +1446,7 @@ ChecksumFs抽象类的实现与ChecksumFileSystem 的实现完全一样。
 
 ![img](./images/7-3.png)
 
-###7.4  LocalFs类
+###7.4 LocalFs类
 LocalFs仅仅有两个构造函数。如图7-4:
 
 ![img][7-4.png]
